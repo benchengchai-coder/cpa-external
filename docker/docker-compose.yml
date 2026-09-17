@@ -23,9 +23,10 @@ services:
       TZ: Asia/Shanghai
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       MYSQL_DATABASE: ${MYSQL_DATABASE:-cpa_external}
-    # 仅绑定宿主机回环地址，公网不可见；远程运维走 SSH 隧道
+    # 绑定宿主机所有网卡，公网可直接访问；
+    # 必须在云安全组/防火墙限制 3306 的来源 IP，并确保 root 密码足够强
     ports:
-      - "127.0.0.1:3306:3306"
+      - "3306:3306"
     volumes:
       - ./mysql/conf/my.cnf:/etc/my.cnf
       - ./mysql/data:/var/lib/mysql

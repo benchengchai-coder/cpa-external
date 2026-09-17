@@ -92,8 +92,8 @@
         </template>
       </el-table-column>
     
-      <el-table-column label="客户端IP" align="center" prop="ip" width="150" :show-overflow-tooltip="true">
-        <template #default="scope">{{ scope.row.ip || '-' }}</template>
+      <el-table-column label="客户端IP" align="center" prop="xForwardedFor" width="150" :show-overflow-tooltip="true">
+        <template #default="scope">{{ scope.row.xForwardedFor || scope.row.clientIp || '-' }}</template>
       </el-table-column>
       <el-table-column label="模型" align="center" prop="modelName" width="200" :show-overflow-tooltip="true">
         <template #default="scope">
@@ -294,10 +294,6 @@
             <div class="detail-field">
               <span class="detail-field__label">推理等级</span>
               <span class="detail-field__value">{{ reasoningEffortLabel(detail.reasoningEffort || '') || '-' }}</span>
-            </div>
-            <div class="detail-field">
-              <span class="detail-field__label">来源</span>
-              <span class="detail-field__value">{{ detail.source || '-' }}</span>
             </div>
             <div class="detail-field">
               <span class="detail-field__label">认证类型</span>
@@ -727,10 +723,6 @@ function relayModeTagType(mode: string): '' | 'success' | 'info' | 'warning' | '
 }
 
 function providerDisplayText(row: AiLog): string {
-  const authType = (row.authType || '').toLowerCase().replace(/[\s_-]/g, '')
-  if (authType.includes('oauth')) {
-    return row.source || '-'
-  }
   // CLIProxyAPI 对 openai-compatibility 配置段的自定义供应商，上报的 provider 是「openai-compatible-名称」内部 key，展示时剥掉前缀
   const provider = row.provider || ''
   const prefix = 'openai-compatible-'

@@ -208,7 +208,6 @@ export interface AiLog extends BaseEntity {
   reasoningEffort?: string;
   channelId?: number;
   channelName?: string;
-  ip?: string;
   promptTokens?: number;
   completionTokens?: number;
   cacheReadTokens?: number;
@@ -225,7 +224,6 @@ export interface AiLog extends BaseEntity {
   errorMessage?: string;
   timestamp?: string;
   latencyMs?: number;
-  source?: string;
   authIndex?: string;
   inputTokens?: number;
   outputTokens?: number;

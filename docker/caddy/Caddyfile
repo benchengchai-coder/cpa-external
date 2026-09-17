@@ -10,8 +10,34 @@
 # /opt/cpa-external/frontend）；后端 jar 由 docker 容器运行，仅绑定
 # 宿主机回环 127.0.0.1:8080。
 # ============================================
+api.cbc.icu {
+    encode zstd gzip
 
-cbc.icu www.cbc.icu {
+    reverse_proxy 127.0.0.1:8317 {
+        # 关闭响应缓冲，保证 SSE / 流式输出实时返回
+        flush_interval -1
+
+        header_up Host                {host}
+        header_up X-Real-IP           {remote_host}
+        header_up X-Forwarded-For     {remote_host}
+        header_up X-Forwarded-Proto   {scheme}
+
+        # 大模型请求耗时较长，放宽超时
+        transport http {
+            read_timeout  30m
+            write_timeout 30m
+            dial_timeout  10s
+        }
+    }
+
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Content-Type-Options    "nosniff"
+        Referrer-Policy           "strict-origin-when-cross-origin"
+        -Server
+    }
+}
+ai.cbc.icu {
     encode zstd gzip
 
     # 安全头
@@ -24,7 +50,7 @@ cbc.icu www.cbc.icu {
 
     # 管理接口：剥离 /prod-api 前缀后转给应用容器
     handle_path /prod-api/* {
-        reverse_proxy 127.0.0.1:8080 {
+        reverse_proxy 43.163.69.198:8080 {
         	# 关闭响应缓冲，保证 SSE / 流式输出实时返回
 	        flush_interval -1
 

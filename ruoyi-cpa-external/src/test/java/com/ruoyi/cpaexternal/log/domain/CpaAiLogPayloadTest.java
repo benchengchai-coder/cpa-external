@@ -1,13 +1,33 @@
 package com.ruoyi.cpaexternal.log.domain;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.Test;
+import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
 /** 校验 CLIProxyAPI 实际日志结构可以被 Spring Boot 4 的 Jackson 3 反序列化。 */
 class CpaAiLogPayloadTest
 {
+    /** 查询响应只暴露含义明确的原始 IP 字段，不再生成模糊的 ip 兼容别名。 */
+    @Test
+    void shouldSerializeExplicitClientAddressFieldsWithoutIpAlias()
+    {
+        CpaAiLog log = new CpaAiLog();
+        log.setSource("private-user@example.com");
+        log.setClientIp("172.18.0.1");
+        log.setXForwardedFor("23.249.17.196");
+
+        ObjectMapper objectMapper = new ObjectMapper();
+        JsonNode json = objectMapper.readTree(objectMapper.writeValueAsString(log));
+
+        assertEquals("172.18.0.1", json.get("clientIp").asText());
+        assertEquals("23.249.17.196", json.get("xForwardedFor").asText());
+        assertFalse(json.has("ip"));
+        assertFalse(json.has("source"));
+    }
+
     @Test
     void shouldDeserializeCliProxyApiLog()
     {

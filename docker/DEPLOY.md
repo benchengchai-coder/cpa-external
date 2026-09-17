@@ -10,7 +10,7 @@
               └─ 其余路径：直接托管 /opt/cpa-external/frontend 下的前端静态文件
 
 Docker Compose 管理三个容器：
-  cpa-external-mysql   MySQL 8.0    （仅绑定宿主机回环 3306）
+  cpa-external-mysql   MySQL 8.0    （绑定公网 3306，安全组需限制来源 IP）
   cpa-external-redis   Redis 7.2    （仅绑定宿主机回环 6379）
   cpa-external         Spring Boot  （镜像来自 ghcr.io，仅绑定宿主机回环 8080）
 

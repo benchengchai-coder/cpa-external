@@ -2,6 +2,7 @@ package com.ruoyi.cpaexternal.log.domain;
 
 import java.math.BigDecimal;
 import java.util.Date;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonRawValue;
 import com.ruoyi.common.core.domain.BaseEntity;
 
@@ -71,6 +72,8 @@ public class CpaAiLog extends BaseEntity
     public void setTimestamp(Date timestamp) { this.timestamp = timestamp; }
     public Integer getLatencyMs() { return latencyMs; }
     public void setLatencyMs(Integer latencyMs) { this.latencyMs = latencyMs; }
+    /** CLIProxyAPI 上报的来源标识可能含账号信息，仅供服务端归属查询，禁止通过接口返回。 */
+    @JsonIgnore
     public String getSource() { return source; }
     public void setSource(String source) { this.source = source; }
     public String getAuthIndex() { return authIndex; }
@@ -192,7 +195,6 @@ public class CpaAiLog extends BaseEntity
     public Integer getReasoningOutputTokens() { return reasoningTokens; }
     public Integer getCacheWriteTokens() { return cacheCreationTokens; }
     public Integer getTtft() { return ttftMs; }
-    public String getIp() { return clientIp; }
     public Integer getIsStream() { return Boolean.TRUE.equals(stream) ? 1 : 0; }
     public String getStatus() { return status == null ? (Boolean.TRUE.equals(failed) ? "1" : "0") : status; }
     public void setStatus(String status) { this.status = status; }

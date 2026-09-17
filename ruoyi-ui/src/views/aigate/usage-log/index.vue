@@ -62,8 +62,8 @@
         </template>
       </el-table-column>
 
-      <el-table-column label="客户端IP" align="center" prop="ip" width="150" :show-overflow-tooltip="true">
-        <template #default="scope">{{ scope.row.ip || '-' }}</template>
+      <el-table-column label="客户端IP" align="center" prop="xForwardedFor" width="150" :show-overflow-tooltip="true">
+        <template #default="scope">{{ scope.row.xForwardedFor || scope.row.clientIp || '-' }}</template>
       </el-table-column>
       <el-table-column label="模型" align="center" prop="modelName" width="250" :show-overflow-tooltip="true">
         <template #default="scope">
@@ -201,7 +201,6 @@
         <el-descriptions-item label="模型">{{ detail.modelName || '-' }}</el-descriptions-item>
         <el-descriptions-item label="提供方">{{ detail.channelName || '-' }}</el-descriptions-item>
         <el-descriptions-item label="端点">{{ detail.relayMode || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="来源">{{ detail.source || '-' }}</el-descriptions-item>
         <el-descriptions-item label="认证索引">{{ detail.authIndex || '-' }}</el-descriptions-item>
         <el-descriptions-item label="认证类型">{{ detail.authType || '-' }}</el-descriptions-item>
         <el-descriptions-item label="模型别名">{{ detail.alias || '-' }}</el-descriptions-item>
