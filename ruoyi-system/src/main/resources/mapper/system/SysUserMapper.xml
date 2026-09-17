@@ -1,0 +1,396 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.system.mapper.SysUserMapper">
+
+    <resultMap type="SysUser" id="SysUserResult">
+        <id     property="userId"        column="user_id"         />
+        <result property="deptId"        column="dept_id"         />
+        <result property="userName"      column="user_name"       />
+        <result property="nickName"      column="nick_name"       />
+        <result property="email"         column="email"           />
+        <result property="phonenumber"   column="phonenumber"     />
+        <result property="sex"           column="sex"             />
+        <result property="avatar"        column="avatar"          />
+        <result property="password"      column="password"        />
+        <result property="status"        column="status"          />
+        <result property="balance"       column="balance"         />
+        <result property="frozenBalance" column="frozen_balance"  />
+        <result property="usedBalance"   column="used_balance"    />
+        <result property="requestCount"  column="request_count"   />
+        <result property="billingMultiplier" column="billing_multiplier" />
+        <result property="billingPreference" column="billing_preference" />
+        <result property="aiConcurrencyLimit" column="ai_concurrency_limit" />
+        <result property="activeRequestCount" column="active_request_count" />
+        <result property="activeSubscriptionId" column="active_subscription_id" />
+        <result property="activeSubscriptionTitle" column="active_subscription_title" />
+        <result property="activeSubscriptionAmountTotal" column="active_subscription_amount_total" />
+        <result property="activeSubscriptionAmountUsed" column="active_subscription_amount_used" />
+        <result property="activeSubscriptionEndTime" column="active_subscription_end_time" />
+        <result property="delFlag"       column="del_flag"        />
+        <result property="loginIp"       column="login_ip"        />
+        <result property="loginDate"     column="login_date"      />
+        <result property="pwdUpdateDate" column="pwd_update_date" />
+        <result property="createBy"      column="create_by"       />
+        <result property="createTime"    column="create_time"     />
+        <result property="updateBy"      column="update_by"       />
+        <result property="updateTime"    column="update_time"     />
+        <result property="remark"        column="remark"          />
+        <association property="dept"     javaType="SysDept"         resultMap="deptResult" />
+        <collection  property="roles"    javaType="java.util.List"  resultMap="RoleResult" />
+    </resultMap>
+	
+    <resultMap id="deptResult" type="SysDept">
+        <id     property="deptId"    column="dept_id"     />
+        <result property="parentId"  column="parent_id"   />
+        <result property="deptName"  column="dept_name"   />
+        <result property="ancestors" column="ancestors"   />
+        <result property="orderNum"  column="order_num"   />
+        <result property="leader"    column="leader"      />
+        <result property="status"    column="dept_status" />
+    </resultMap>
+	
+    <resultMap id="RoleResult" type="SysRole">
+        <id     property="roleId"       column="role_id"        />
+        <result property="roleName"     column="role_name"      />
+        <result property="roleKey"      column="role_key"       />
+        <result property="roleSort"     column="role_sort"      />
+        <result property="dataScope"    column="data_scope"     />
+        <result property="status"       column="role_status"    />
+    </resultMap>
+	
+	<sql id="selectUserVo">
+        select u.user_id, u.dept_id, u.user_name, u.nick_name, u.email, u.avatar, u.phonenumber, u.password, u.sex, u.status,
+        u.balance, u.frozen_balance, u.used_balance, u.request_count, u.billing_multiplier, u.billing_preference,
+        u.ai_concurrency_limit, u.active_request_count,
+        u.del_flag, u.login_ip, u.login_date, u.pwd_update_date, u.create_by, u.create_time, u.update_by, u.update_time, u.remark,
+        d.dept_id, d.parent_id, d.ancestors, d.dept_name, d.order_num, d.leader, d.status as dept_status,
+        r.role_id, r.role_name, r.role_key, r.role_sort, r.data_scope, r.status as role_status
+        from sys_user u
+		    left join sys_dept d on u.dept_id = d.dept_id
+		    left join sys_user_role ur on u.user_id = ur.user_id
+		    left join sys_role r on r.role_id = ur.role_id
+    </sql>
+    
+    <select id="selectUserList" parameterType="SysUser" resultMap="SysUserResult">
+		select u.user_id, u.dept_id, u.nick_name, u.user_name, u.email, u.avatar, u.phonenumber, u.sex, u.status,
+		u.balance, u.frozen_balance, u.used_balance, u.request_count, u.billing_multiplier, u.billing_preference,
+		u.ai_concurrency_limit,
+		s.subscription_id as active_subscription_id, s.plan_title as active_subscription_title,
+		s.amount_total as active_subscription_amount_total, s.amount_used as active_subscription_amount_used,
+		s.end_time as active_subscription_end_time,
+		u.del_flag, u.login_ip, u.login_date, u.create_by, u.create_time, u.remark, d.dept_name, d.leader from sys_user u
+		left join sys_dept d on u.dept_id = d.dept_id
+		left join ai_user_subscription s on s.subscription_id = (
+			select s2.subscription_id
+			from ai_user_subscription s2
+			where s2.user_id = u.user_id
+				and s2.status = 'active'
+				and s2.end_time &gt; sysdate()
+			order by s2.end_time desc, s2.subscription_id desc
+			limit 1
+		)
+		where u.del_flag = '0'
+		<if test="userId != null and userId != 0">
+			AND u.user_id = #{userId}
+		</if>
+		<if test="userName != null and userName != ''">
+			AND u.user_name like concat('%', #{userName}, '%')
+		</if>
+		<if test="status != null and status != ''">
+			AND u.status = #{status}
+		</if>
+		<if test="phonenumber != null and phonenumber != ''">
+			AND u.phonenumber like concat('%', #{phonenumber}, '%')
+		</if>
+		<if test="params.beginTime != null and params.beginTime != ''"><!-- 开始时间检索 -->
+			AND date_format(u.create_time,'%Y%m%d') &gt;= date_format(#{params.beginTime},'%Y%m%d')
+		</if>
+		<if test="params.endTime != null and params.endTime != ''"><!-- 结束时间检索 -->
+			AND date_format(u.create_time,'%Y%m%d') &lt;= date_format(#{params.endTime},'%Y%m%d')
+		</if>
+		<if test="deptId != null and deptId != 0">
+			AND (u.dept_id = #{deptId} OR u.dept_id IN ( SELECT t.dept_id FROM sys_dept t WHERE find_in_set(#{deptId}, ancestors) ))
+		</if>
+		<!-- 数据范围过滤 -->
+		${params.dataScope}
+	</select>
+	
+	<select id="selectAllocatedList" parameterType="SysUser" resultMap="SysUserResult">
+	    select distinct u.user_id, u.dept_id, u.user_name, u.nick_name, u.email, u.phonenumber, u.status, u.create_time
+	    from sys_user u
+			 left join sys_dept d on u.dept_id = d.dept_id
+			 left join sys_user_role ur on u.user_id = ur.user_id
+			 left join sys_role r on r.role_id = ur.role_id
+	    where u.del_flag = '0' and r.role_id = #{roleId}
+	    <if test="userName != null and userName != ''">
+			AND u.user_name like concat('%', #{userName}, '%')
+		</if>
+		<if test="phonenumber != null and phonenumber != ''">
+			AND u.phonenumber like concat('%', #{phonenumber}, '%')
+		</if>
+		<!-- 数据范围过滤 -->
+		${params.dataScope}
+	</select>
+	
+	<select id="selectUnallocatedList" parameterType="SysUser" resultMap="SysUserResult">
+	    select distinct u.user_id, u.dept_id, u.user_name, u.nick_name, u.email, u.phonenumber, u.status, u.create_time
+	    from sys_user u
+			 left join sys_dept d on u.dept_id = d.dept_id
+			 left join sys_user_role ur on u.user_id = ur.user_id
+			 left join sys_role r on r.role_id = ur.role_id
+	    where u.del_flag = '0' and (r.role_id != #{roleId} or r.role_id IS NULL)
+	    and u.user_id not in (select u.user_id from sys_user u inner join sys_user_role ur on u.user_id = ur.user_id and ur.role_id = #{roleId})
+	    <if test="userName != null and userName != ''">
+			AND u.user_name like concat('%', #{userName}, '%')
+		</if>
+		<if test="phonenumber != null and phonenumber != ''">
+			AND u.phonenumber like concat('%', #{phonenumber}, '%')
+		</if>
+		<!-- 数据范围过滤 -->
+		${params.dataScope}
+	</select>
+	
+	<select id="selectUserByUserName" parameterType="String" resultMap="SysUserResult">
+	    <include refid="selectUserVo"/>
+		where u.user_name = #{userName} and u.del_flag = '0'
+	</select>
+	
+	<select id="selectUserById" parameterType="Long" resultMap="SysUserResult">
+		<include refid="selectUserVo"/>
+		where u.user_id = #{userId}
+	</select>
+
+	<select id="selectUserByIdForUpdate" parameterType="Long" resultMap="SysUserResult">
+	select user_id, status, balance, frozen_balance, used_balance, request_count, billing_multiplier, billing_preference,
+		       ai_concurrency_limit
+		from sys_user
+		where user_id = #{userId}
+		for update
+	</select>
+
+	<select id="selectUserBillingSnapshot" parameterType="Long" resultMap="SysUserResult">
+		select user_id, status, balance, frozen_balance, used_balance, request_count, billing_multiplier, billing_preference,
+		       ai_concurrency_limit, active_request_count
+		from sys_user
+		where user_id = #{userId}
+	</select>
+	
+	<select id="checkUserNameUnique" parameterType="String" resultMap="SysUserResult">
+		select user_id, user_name from sys_user where user_name = #{userName} and del_flag = '0' limit 1
+	</select>
+	
+	<select id="checkPhoneUnique" parameterType="String" resultMap="SysUserResult">
+		select user_id, phonenumber from sys_user where phonenumber = #{phonenumber} and del_flag = '0' limit 1
+	</select>
+	
+	<select id="checkEmailUnique" parameterType="String" resultMap="SysUserResult">
+		select user_id, email from sys_user where email = #{email} and del_flag = '0' limit 1
+	</select>
+	
+	<insert id="insertUser" parameterType="SysUser" useGeneratedKeys="true" keyProperty="userId">
+ 		insert into sys_user(
+ 			<if test="userId != null and userId != 0">user_id,</if>
+ 			<if test="deptId != null and deptId != 0">dept_id,</if>
+ 			<if test="userName != null and userName != ''">user_name,</if>
+ 			<if test="nickName != null and nickName != ''">nick_name,</if>
+ 			<if test="email != null and email != ''">email,</if>
+ 			<if test="avatar != null and avatar != ''">avatar,</if>
+ 			<if test="phonenumber != null and phonenumber != ''">phonenumber,</if>
+ 			<if test="sex != null and sex != ''">sex,</if>
+ 			<if test="password != null and password != ''">password,</if>
+			<if test="status != null and status != ''">status,</if>
+			<if test="balance != null">balance,</if>
+			<if test="usedBalance != null">used_balance,</if>
+ 			<if test="requestCount != null">request_count,</if>
+			<if test="billingMultiplier != null">billing_multiplier,</if>
+			<if test="billingPreference != null and billingPreference != ''">billing_preference,</if>
+ 			<if test="pwdUpdateDate != null">pwd_update_date,</if>
+ 			<if test="createBy != null and createBy != ''">create_by,</if>
+ 			<if test="remark != null and remark != ''">remark,</if>
+ 			create_time
+ 		)values(
+ 			<if test="userId != null and userId != ''">#{userId},</if>
+ 			<if test="deptId != null and deptId != ''">#{deptId},</if>
+ 			<if test="userName != null and userName != ''">#{userName},</if>
+ 			<if test="nickName != null and nickName != ''">#{nickName},</if>
+ 			<if test="email != null and email != ''">#{email},</if>
+ 			<if test="avatar != null and avatar != ''">#{avatar},</if>
+ 			<if test="phonenumber != null and phonenumber != ''">#{phonenumber},</if>
+ 			<if test="sex != null and sex != ''">#{sex},</if>
+ 			<if test="password != null and password != ''">#{password},</if>
+			<if test="status != null and status != ''">#{status},</if>
+			<if test="balance != null">#{balance},</if>
+			<if test="usedBalance != null">#{usedBalance},</if>
+ 			<if test="requestCount != null">#{requestCount},</if>
+			<if test="billingMultiplier != null">#{billingMultiplier},</if>
+			<if test="billingPreference != null and billingPreference != ''">#{billingPreference},</if>
+ 			<if test="pwdUpdateDate != null">#{pwdUpdateDate},</if>
+ 			<if test="createBy != null and createBy != ''">#{createBy},</if>
+ 			<if test="remark != null and remark != ''">#{remark},</if>
+ 			sysdate()
+ 		)
+	</insert>
+	
+	<update id="updateUser" parameterType="SysUser">
+ 		update sys_user
+ 		<set>
+ 			<if test="deptId != 0">dept_id = #{deptId},</if>
+ 			<if test="nickName != null and nickName != ''">nick_name = #{nickName},</if>
+ 			<if test="email != null ">email = #{email},</if>
+ 			<if test="phonenumber != null ">phonenumber = #{phonenumber},</if>
+ 			<if test="sex != null and sex != ''">sex = #{sex},</if>
+			<if test="avatar != null and avatar != ''">avatar = #{avatar},</if>
+			<if test="password != null and password != ''">password = #{password},</if>
+			<if test="status != null and status != ''">status = #{status},</if>
+			<if test="billingMultiplier != null">billing_multiplier = #{billingMultiplier},</if>
+			<if test="billingPreference != null and billingPreference != ''">billing_preference = #{billingPreference},</if>
+ 			<if test="loginIp != null and loginIp != ''">login_ip = #{loginIp},</if>
+ 			<if test="loginDate != null">login_date = #{loginDate},</if>
+ 			<if test="updateBy != null and updateBy != ''">update_by = #{updateBy},</if>
+ 			<if test="remark != null">remark = #{remark},</if>
+ 			update_time = sysdate()
+		</set>
+		where user_id = #{userId}
+	</update>
+	
+	<update id="updateUserStatus" parameterType="SysUser">
+ 		update sys_user set status = #{status}, update_time = sysdate() where user_id = #{userId}
+	</update>
+
+	<update id="updateUserBillingMultiplier">
+		update sys_user
+		set billing_multiplier = #{billingMultiplier}, update_time = sysdate()
+		where user_id = #{userId} and del_flag = '0'
+	</update>
+
+	<update id="deductUserBalance">
+		update sys_user
+		set balance = balance - #{cost},
+			used_balance = used_balance + #{cost},
+			request_count = request_count + 1,
+			update_time = sysdate()
+		where user_id = #{userId}
+		  and balance - frozen_balance &gt;= #{cost}
+	</update>
+
+	<update id="freezeUserBalance">
+		update sys_user
+		set frozen_balance = frozen_balance + #{amount},
+			update_time = sysdate()
+		where user_id = #{userId}
+		  and #{amount} &gt;= 0
+		  and balance - frozen_balance &gt;= #{amount}
+	</update>
+
+	<update id="releaseUserFrozenBalance">
+		update sys_user
+		set frozen_balance = frozen_balance - #{amount},
+			update_time = sysdate()
+		where user_id = #{userId}
+		  and #{amount} &gt;= 0
+		  and frozen_balance &gt;= #{amount}
+	</update>
+
+	<update id="settleUserBilling">
+		update sys_user
+		set balance = balance - #{walletCharged},
+			frozen_balance = frozen_balance - #{walletReserved},
+			used_balance = used_balance + #{actualCost},
+			request_count = request_count + #{requestIncrement},
+			update_time = sysdate()
+		where user_id = #{userId}
+		  and frozen_balance &gt;= #{walletReserved}
+		  and balance - frozen_balance + #{walletReserved} &gt;= #{walletCharged}
+	</update>
+
+	<update id="recordUserSubscriptionUsage">
+		update sys_user
+		set used_balance = used_balance + #{cost},
+			request_count = request_count + 1,
+			update_time = sysdate()
+		where user_id = #{userId}
+	</update>
+		<update id="addUserBalance">
+			update sys_user
+			set balance = balance + #{amount},
+				update_time = sysdate()
+			where user_id = #{userId}
+		</update>
+
+	<update id="setUserBalance">
+		update sys_user
+		set balance = #{balance},
+			update_time = sysdate()
+		where user_id = #{userId}
+		  and #{balance} &gt;= frozen_balance
+	</update>
+
+	<update id="subUserBalance">
+		update sys_user
+		set balance = balance - #{amount},
+			update_time = sysdate()
+		where user_id = #{userId}
+		  and balance - frozen_balance &gt;= #{amount}
+	</update>
+
+	<update id="updateBillingPreference">
+		update sys_user
+		set billing_preference = #{billingPreference},
+			update_time = sysdate()
+		where user_id = #{userId}
+	</update>
+
+	<update id="updateUserAiConcurrencyLimit">
+		update sys_user
+		set ai_concurrency_limit = #{aiConcurrencyLimit},
+			update_by = #{updateBy},
+			update_time = sysdate()
+		where user_id = #{userId}
+		  and del_flag = '0'
+	</update>
+
+	<!-- AI并发自增：条件UPDATE即"检查+占位"，当前读且持有用户行锁，串行化同一用户的预占；
+	     影响行数为0表示已达上限（或上限为0被禁用），由调用方回滚整个预占事务 -->
+	<update id="incrementUserActiveRequestCount">
+		update sys_user
+		set active_request_count = active_request_count + 1,
+			update_time = sysdate()
+		where user_id = #{userId}
+		  and active_request_count &lt; ai_concurrency_limit
+	</update>
+
+	<!-- AI并发递减：账单离开reserved状态的出口调用；&gt;0 守卫将潜在漂移钳制在0，避免负数放大限值 -->
+	<update id="decrementUserActiveRequestCount">
+		update sys_user
+		set active_request_count = active_request_count - 1,
+			update_time = sysdate()
+		where user_id = #{userId}
+		  and active_request_count &gt; 0
+	</update>
+
+	<update id="updateUserAvatar" parameterType="SysUser">
+ 		update sys_user set avatar = #{avatar}, update_time = sysdate() where user_id = #{userId}
+	</update>
+	
+  	<update id="updateLoginInfo" parameterType="SysUser">
+ 		update sys_user set login_ip = #{loginIp}, login_date = #{loginDate} where user_id = #{userId}
+	</update>
+	
+	<update id="resetUserPwd" parameterType="SysUser">
+ 		update sys_user set pwd_update_date = sysdate(), password = #{password}, update_time = sysdate() where user_id = #{userId}
+	</update>
+	
+	<delete id="deleteUserById" parameterType="Long">
+ 		update sys_user set del_flag = '2' where user_id = #{userId}
+ 	</delete>
+ 	
+ 	<delete id="deleteUserByIds" parameterType="Long">
+ 		update sys_user set del_flag = '2' where user_id in
+ 		<foreach collection="array" item="userId" open="(" separator="," close=")">
+ 			#{userId}
+        </foreach> 
+ 	</delete>
+	
+</mapper> 

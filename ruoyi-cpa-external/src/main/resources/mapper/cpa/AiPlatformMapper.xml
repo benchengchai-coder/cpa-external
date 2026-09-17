@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.cpaexternal.platform.mapper.AiPlatformMapper">
+
+    <resultMap id="AiPlatformResult" type="com.ruoyi.cpaexternal.platform.domain.AiPlatform">
+        <id property="platformId" column="platform_id" />
+        <result property="platformVal" column="platform_val" />
+        <result property="platformName" column="platform_name" />
+        <result property="status" column="status" />
+        <result property="remark" column="remark" />
+    </resultMap>
+
+    <sql id="selectAiPlatformVo">
+        select platform_id, platform_val, platform_name, status, remark
+        from ai_platform
+    </sql>
+
+    <select id="selectAiPlatformById" parameterType="Long" resultMap="AiPlatformResult">
+        <include refid="selectAiPlatformVo"/>
+        where platform_id = #{platformId}
+    </select>
+
+    <select id="selectAiPlatformList" parameterType="com.ruoyi.cpaexternal.platform.domain.AiPlatform" resultMap="AiPlatformResult">
+        <include refid="selectAiPlatformVo"/>
+        <where>
+            <if test="platformVal != null and platformVal != ''">and platform_val = #{platformVal}</if>
+            <if test="platformName != null and platformName != ''">and platform_name like concat('%', #{platformName}, '%')</if>
+            <if test="status != null and status != ''">and status = #{status}</if>
+        </where>
+        order by platform_id asc
+    </select>
+
+    <insert id="insertAiPlatform" parameterType="com.ruoyi.cpaexternal.platform.domain.AiPlatform" useGeneratedKeys="true" keyProperty="platformId">
+        insert into ai_platform
+        <trim prefix="(" suffix=")" suffixOverrides=",">
+            <if test="platformVal != null and platformVal != ''">platform_val,</if>
+            <if test="platformName != null and platformName != ''">platform_name,</if>
+            <if test="status != null and status != ''">status,</if>
+            <if test="remark != null">remark,</if>
+        </trim>
+        <trim prefix="values (" suffix=")" suffixOverrides=",">
+            <if test="platformVal != null and platformVal != ''">#{platformVal},</if>
+            <if test="platformName != null and platformName != ''">#{platformName},</if>
+            <if test="status != null and status != ''">#{status},</if>
+            <if test="remark != null">#{remark},</if>
+        </trim>
+    </insert>
+
+    <update id="updateAiPlatform" parameterType="com.ruoyi.cpaexternal.platform.domain.AiPlatform">
+        update ai_platform
+        <set>
+            <if test="platformVal != null and platformVal != ''">platform_val = #{platformVal},</if>
+            <if test="platformName != null and platformName != ''">platform_name = #{platformName},</if>
+            <if test="status != null and status != ''">status = #{status},</if>
+            <if test="remark != null">remark = #{remark},</if>
+        </set>
+        where platform_id = #{platformId}
+    </update>
+
+    <delete id="deleteAiPlatformById" parameterType="Long">
+        delete from ai_platform where platform_id = #{platformId}
+    </delete>
+
+    <delete id="deleteAiPlatformByIds" parameterType="Long">
+        delete from ai_platform where platform_id in
+        <foreach item="platformId" collection="array" open="(" separator="," close=")">
+            #{platformId}
+        </foreach>
+    </delete>
+</mapper>

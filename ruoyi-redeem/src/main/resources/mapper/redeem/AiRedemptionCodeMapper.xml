@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.redeem.mapper.AiRedemptionCodeMapper">
+
+    <resultMap type="AiRedemptionCode" id="AiRedemptionCodeResult">
+        <id     property="codeId"         column="code_id" />
+        <result property="codeName"       column="code_name" />
+        <result property="quota"          column="quota" />
+        <result property="redemptionKey"  column="redemption_key" />
+        <result property="status"         column="status" />
+        <result property="expiredTime"    column="expired_time" />
+        <result property="usedUserId"     column="used_user_id" />
+        <result property="usedUsername"   column="used_username" />
+        <result property="redeemedTime"   column="redeemed_time" />
+        <result property="createBy"       column="create_by" />
+        <result property="createTime"     column="create_time" />
+        <result property="updateBy"       column="update_by" />
+        <result property="updateTime"     column="update_time" />
+        <result property="remark"         column="remark" />
+    </resultMap>
+
+    <sql id="selectAiRedemptionCodeVo">
+        select code_id, code_name, quota, redemption_key, status,
+               expired_time, used_user_id, used_username, redeemed_time,
+               create_by, create_time, update_by, update_time, remark
+        from ai_redemption_code
+    </sql>
+
+    <select id="selectAiRedemptionCodeById" parameterType="Long" resultMap="AiRedemptionCodeResult">
+        <include refid="selectAiRedemptionCodeVo"/>
+        where code_id = #{codeId}
+    </select>
+
+    <select id="selectAiRedemptionCodeByKey" parameterType="String" resultMap="AiRedemptionCodeResult">
+        <include refid="selectAiRedemptionCodeVo"/>
+        where redemption_key = #{redemptionKey}
+    </select>
+
+    <select id="selectAiRedemptionCodeList" parameterType="AiRedemptionCode" resultMap="AiRedemptionCodeResult">
+        <include refid="selectAiRedemptionCodeVo"/>
+        <where>
+            <if test="codeName != null and codeName != ''">and code_name like concat('%', #{codeName}, '%')</if>
+            <if test="redemptionKey != null and redemptionKey != ''">and redemption_key like concat('%', #{redemptionKey}, '%')</if>
+            <if test="status != null and status != ''">and status = #{status}</if>
+            <if test="usedUserId != null">and used_user_id = #{usedUserId}</if>
+        </where>
+        order by code_id desc
+    </select>
+
+    <insert id="insertAiRedemptionCode" parameterType="AiRedemptionCode" useGeneratedKeys="true" keyProperty="codeId">
+        insert into ai_redemption_code
+        <trim prefix="(" suffix=")" suffixOverrides=",">
+            <if test="codeName != null and codeName != ''">code_name,</if>
+            <if test="quota != null">quota,</if>
+            <if test="redemptionKey != null and redemptionKey != ''">redemption_key,</if>
+            <if test="status != null and status != ''">status,</if>
+            <if test="expiredTime != null">expired_time,</if>
+            <if test="createBy != null and createBy != ''">create_by,</if>
+            <if test="remark != null">remark,</if>
+            create_time
+        </trim>
+        <trim prefix="values (" suffix=")" suffixOverrides=",">
+            <if test="codeName != null and codeName != ''">#{codeName},</if>
+            <if test="quota != null">#{quota},</if>
+            <if test="redemptionKey != null and redemptionKey != ''">#{redemptionKey},</if>
+            <if test="status != null and status != ''">#{status},</if>
+            <if test="expiredTime != null">#{expiredTime},</if>
+            <if test="createBy != null and createBy != ''">#{createBy},</if>
+            <if test="remark != null">#{remark},</if>
+            sysdate()
+        </trim>
+    </insert>
+
+    <update id="updateAiRedemptionCode" parameterType="AiRedemptionCode">
+        update ai_redemption_code
+        <set>
+            <if test="codeName != null and codeName != ''">code_name = #{codeName},</if>
+            <if test="quota != null">quota = #{quota},</if>
+            <if test="status != null and status != ''">status = #{status},</if>
+            <if test="expiredTime != null">expired_time = #{expiredTime},</if>
+            <if test="usedUserId != null">used_user_id = #{usedUserId},</if>
+            <if test="usedUsername != null">used_username = #{usedUsername},</if>
+            <if test="redeemedTime != null">redeemed_time = #{redeemedTime},</if>
+            <if test="updateBy != null and updateBy != ''">update_by = #{updateBy},</if>
+            <if test="remark != null">remark = #{remark},</if>
+            update_time = sysdate()
+        </set>
+        where code_id = #{codeId}
+    </update>
+
+    <delete id="deleteAiRedemptionCodeById" parameterType="Long">
+        delete from ai_redemption_code where code_id = #{codeId}
+    </delete>
+
+    <delete id="deleteAiRedemptionCodeByIds" parameterType="Long">
+        delete from ai_redemption_code where code_id in
+        <foreach item="codeId" collection="array" open="(" separator="," close=")">
+            #{codeId}
+        </foreach>
+    </delete>
+</mapper>

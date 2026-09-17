@@ -1,0 +1,215 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.cpaexternal.subscription.mapper.AiUserSubscriptionMapper">
+
+    <resultMap type="AiUserSubscription" id="AiUserSubscriptionResult">
+        <id     property="subscriptionId"          column="subscription_id" />
+        <result property="userId"                  column="user_id" />
+        <result property="username"                column="username" />
+        <result property="planId"                  column="plan_id" />
+        <result property="planTitle"               column="plan_title" />
+        <result property="planSubTitle"            column="plan_sub_title" />
+        <result property="priceAmount"             column="price_amount" />
+        <result property="startTime"               column="start_time" />
+        <result property="endTime"                 column="end_time" />
+        <result property="status"                  column="status" />
+        <result property="amountTotal"             column="amount_total" />
+        <result property="amountUsed"              column="amount_used" />
+        <result property="frozenBalance"           column="frozen_balance" />
+        <result property="quotaResetPeriod"        column="quota_reset_period" />
+        <result property="quotaResetCustomSeconds" column="quota_reset_custom_seconds" />
+        <result property="lastResetTime"           column="last_reset_time" />
+        <result property="nextResetTime"           column="next_reset_time" />
+        <result property="sourceType"              column="source_type" />
+        <result property="createBy"                column="create_by" />
+        <result property="createTime"              column="create_time" />
+        <result property="updateBy"                column="update_by" />
+        <result property="updateTime"              column="update_time" />
+        <result property="remark"                  column="remark" />
+    </resultMap>
+
+    <sql id="selectAiUserSubscriptionVo">
+        select s.subscription_id, s.user_id, s.username, s.plan_id, s.plan_title, s.plan_sub_title,
+               s.price_amount, s.start_time, s.end_time, s.status, s.amount_total, s.amount_used, s.frozen_balance,
+               s.quota_reset_period, s.quota_reset_custom_seconds, s.last_reset_time, s.next_reset_time,
+               s.source_type, s.create_by, s.create_time, s.update_by, s.update_time, s.remark
+        from ai_user_subscription s
+    </sql>
+
+    <select id="selectAiUserSubscriptionById" parameterType="Long" resultMap="AiUserSubscriptionResult">
+        <include refid="selectAiUserSubscriptionVo"/>
+        where s.subscription_id = #{subscriptionId}
+    </select>
+
+    <select id="selectAiUserSubscriptionByIdForUpdate" parameterType="Long" resultMap="AiUserSubscriptionResult">
+        select subscription_id, user_id, username, plan_id, plan_title, plan_sub_title,
+               price_amount, start_time, end_time, status, amount_total, amount_used, frozen_balance,
+               quota_reset_period, quota_reset_custom_seconds, last_reset_time, next_reset_time,
+               source_type, create_by, create_time, update_by, update_time, remark
+        from ai_user_subscription
+        where subscription_id = #{subscriptionId}
+        for update
+    </select>
+
+    <select id="selectAiUserSubscriptionList" parameterType="AiUserSubscription" resultMap="AiUserSubscriptionResult">
+        <include refid="selectAiUserSubscriptionVo"/>
+        <where>
+            <if test="userId != null">and s.user_id = #{userId}</if>
+            <if test="username != null and username != ''">and s.username like concat('%', #{username}, '%')</if>
+            <if test="planId != null">and s.plan_id = #{planId}</if>
+            <if test="planTitle != null and planTitle != ''">and s.plan_title like concat('%', #{planTitle}, '%')</if>
+            <if test="status != null and status != ''">and s.status = #{status}</if>
+            <if test="sourceType != null and sourceType != ''">and s.source_type = #{sourceType}</if>
+        </where>
+        order by s.end_time desc, s.subscription_id desc
+    </select>
+
+    <select id="selectActiveSubscriptionByUserId" resultMap="AiUserSubscriptionResult">
+        <include refid="selectAiUserSubscriptionVo"/>
+        where s.user_id = #{userId} and s.status = 'active' and s.end_time &gt; sysdate()
+        order by s.end_time desc, s.subscription_id desc
+        limit 1
+    </select>
+
+    <select id="selectActiveSubscriptionForUpdate" resultMap="AiUserSubscriptionResult">
+        select subscription_id, user_id, username, plan_id, plan_title, plan_sub_title,
+               price_amount, start_time, end_time, status, amount_total, amount_used, frozen_balance,
+               quota_reset_period, quota_reset_custom_seconds, last_reset_time, next_reset_time,
+               source_type, create_by, create_time, update_by, update_time, remark
+        from ai_user_subscription
+        where user_id = #{userId} and status = 'active' and end_time &gt; sysdate()
+        order by end_time desc, subscription_id desc
+        limit 1
+        for update
+    </select>
+
+    <select id="selectActiveSubscriptionSnapshotForBilling" resultMap="AiUserSubscriptionResult">
+        select subscription_id, user_id, username, plan_id, plan_title, plan_sub_title,
+               price_amount, start_time, end_time, status, amount_total, amount_used, frozen_balance,
+               quota_reset_period, quota_reset_custom_seconds, last_reset_time, next_reset_time,
+               source_type, create_by, create_time, update_by, update_time, remark
+        from ai_user_subscription
+        where user_id = #{userId} and status = 'active' and start_time &lt;= sysdate() and end_time &gt; sysdate()
+        order by end_time desc, subscription_id desc
+        limit 1
+        for update
+    </select>
+
+    <update id="freezeAiUserSubscriptionBalance">
+        update ai_user_subscription
+        set frozen_balance = frozen_balance + #{amount}, update_time = sysdate()
+        where subscription_id = #{subscriptionId} and status = 'active' and end_time &gt; sysdate()
+          and #{amount} &gt;= 0
+          and (amount_total = 0 or amount_total - amount_used - frozen_balance &gt;= #{amount})
+    </update>
+
+    <update id="releaseAiUserSubscriptionFrozenBalance">
+        update ai_user_subscription
+        set frozen_balance = frozen_balance - #{amount}, update_time = sysdate()
+        where subscription_id = #{subscriptionId} and #{amount} &gt;= 0 and frozen_balance &gt;= #{amount}
+    </update>
+
+    <update id="settleAiUserSubscriptionBilling">
+        update ai_user_subscription
+        set amount_used = amount_used + #{chargedAmount},
+            frozen_balance = frozen_balance - #{reservedAmount}, update_time = sysdate()
+        where subscription_id = #{subscriptionId} and frozen_balance &gt;= #{reservedAmount}
+          and (amount_total = 0 or amount_used + #{chargedAmount} + frozen_balance - #{reservedAmount} &lt;= amount_total)
+    </update>
+
+    <select id="selectLatestSubscriptionByUserIdAndSourceType" resultMap="AiUserSubscriptionResult">
+        <include refid="selectAiUserSubscriptionVo"/>
+        where s.user_id = #{userId} and s.source_type = #{sourceType}
+        order by s.subscription_id desc
+        limit 1
+    </select>
+
+    <select id="selectExpiredActiveSubscriptionsByUserId" resultMap="AiUserSubscriptionResult">
+        <include refid="selectAiUserSubscriptionVo"/>
+        where s.user_id = #{userId} and s.status = 'active' and s.end_time &lt;= sysdate()
+        order by s.end_time asc, s.subscription_id asc
+    </select>
+
+    <select id="countSubscriptionsByPlanId" parameterType="Long" resultType="int">
+        select count(1) from ai_user_subscription where plan_id = #{planId}
+    </select>
+
+    <select id="countUserPlanSubscriptions" resultType="int">
+        select count(1)
+        from ai_user_subscription
+        where user_id = #{userId}
+          and plan_id = #{planId}
+          and status in ('active', 'cancelled', 'expired')
+    </select>
+
+    <insert id="insertAiUserSubscription" parameterType="AiUserSubscription" useGeneratedKeys="true" keyProperty="subscriptionId">
+        insert into ai_user_subscription
+        <trim prefix="(" suffix=")" suffixOverrides=",">
+            <if test="userId != null">user_id,</if>
+            <if test="username != null">username,</if>
+            <if test="planId != null">plan_id,</if>
+            <if test="planTitle != null">plan_title,</if>
+            <if test="planSubTitle != null">plan_sub_title,</if>
+            <if test="priceAmount != null">price_amount,</if>
+            <if test="startTime != null">start_time,</if>
+            <if test="endTime != null">end_time,</if>
+            <if test="status != null">status,</if>
+            <if test="amountTotal != null">amount_total,</if>
+            <if test="amountUsed != null">amount_used,</if>
+            <if test="quotaResetPeriod != null">quota_reset_period,</if>
+            <if test="quotaResetCustomSeconds != null">quota_reset_custom_seconds,</if>
+            <if test="lastResetTime != null">last_reset_time,</if>
+            <if test="nextResetTime != null">next_reset_time,</if>
+            <if test="sourceType != null">source_type,</if>
+            <if test="createBy != null and createBy != ''">create_by,</if>
+            <if test="remark != null">remark,</if>
+            create_time
+        </trim>
+        <trim prefix="values (" suffix=")" suffixOverrides=",">
+            <if test="userId != null">#{userId},</if>
+            <if test="username != null">#{username},</if>
+            <if test="planId != null">#{planId},</if>
+            <if test="planTitle != null">#{planTitle},</if>
+            <if test="planSubTitle != null">#{planSubTitle},</if>
+            <if test="priceAmount != null">#{priceAmount},</if>
+            <if test="startTime != null">#{startTime},</if>
+            <if test="endTime != null">#{endTime},</if>
+            <if test="status != null">#{status},</if>
+            <if test="amountTotal != null">#{amountTotal},</if>
+            <if test="amountUsed != null">#{amountUsed},</if>
+            <if test="quotaResetPeriod != null">#{quotaResetPeriod},</if>
+            <if test="quotaResetCustomSeconds != null">#{quotaResetCustomSeconds},</if>
+            <if test="lastResetTime != null">#{lastResetTime},</if>
+            <if test="nextResetTime != null">#{nextResetTime},</if>
+            <if test="sourceType != null">#{sourceType},</if>
+            <if test="createBy != null and createBy != ''">#{createBy},</if>
+            <if test="remark != null">#{remark},</if>
+            sysdate()
+        </trim>
+    </insert>
+
+    <update id="updateAiUserSubscriptionStatus">
+        update ai_user_subscription
+        set status = #{status}, update_time = sysdate()
+        where subscription_id = #{subscriptionId}
+    </update>
+
+    <update id="expireAiUserSubscriptionIfDue">
+        update ai_user_subscription
+        set status = 'expired',
+            update_by = #{operator},
+            update_time = sysdate()
+        where subscription_id = #{subscriptionId}
+          and status = 'active'
+          and end_time &lt;= sysdate()
+    </update>
+
+    <delete id="deleteAiUserSubscriptionByIds" parameterType="Long">
+        delete from ai_user_subscription where subscription_id in
+        <foreach item="subscriptionId" collection="array" open="(" separator="," close=")">
+            #{subscriptionId}
+        </foreach>
+    </delete>
+</mapper>

@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.cpaexternal.apikey.mapper.CpaApiKeyMapper">
+    <resultMap id="CpaApiKeyResult" type="com.ruoyi.cpaexternal.apikey.domain.CpaApiKey">
+        <id property="keyId" column="key_id" />
+        <result property="userId" column="user_id" />
+        <result property="keyName" column="key_name" />
+        <result property="apiKey" column="api_key" />
+        <result property="status" column="status" />
+        <result property="accessedTime" column="accessed_time" />
+        <result property="remark" column="remark" />
+    </resultMap>
+
+    <sql id="columns">
+        select key_id, user_id, key_name, api_key, status, accessed_time, remark
+        from ai_apikey
+    </sql>
+
+    <select id="selectById" resultMap="CpaApiKeyResult">
+        <include refid="columns" /> where key_id = #{keyId}
+    </select>
+
+    <select id="selectByPlainKey" resultMap="CpaApiKeyResult">
+        <include refid="columns" /> where api_key = #{apiKey} limit 1
+    </select>
+
+    <select id="selectByUserId" resultMap="CpaApiKeyResult">
+        <include refid="columns" /> where user_id = #{userId} limit 1
+    </select>
+
+    <select id="selectList" parameterType="com.ruoyi.cpaexternal.apikey.domain.CpaApiKey" resultMap="CpaApiKeyResult">
+        <include refid="columns" />
+        <where>
+            <if test="userId != null">and user_id = #{userId}</if>
+            <if test="keyName != null and keyName != ''">and key_name like concat('%', #{keyName}, '%')</if>
+            <if test="status != null and status != ''">and status = #{status}</if>
+        </where>
+        order by key_id desc
+    </select>
+
+    <select id="countByUserId" resultType="int">
+        select count(1) from ai_apikey where user_id = #{userId}
+    </select>
+
+    <insert id="insert" parameterType="com.ruoyi.cpaexternal.apikey.domain.CpaApiKey" useGeneratedKeys="true" keyProperty="keyId">
+        insert into ai_apikey
+        (user_id, key_name, api_key, status, remark)
+        values
+        (#{userId}, #{keyName}, #{apiKey}, #{status}, #{remark})
+    </insert>
+
+    <update id="update" parameterType="com.ruoyi.cpaexternal.apikey.domain.CpaApiKey">
+        update ai_apikey
+        <set>
+            <if test="keyName != null">key_name = #{keyName},</if>
+            <if test="status != null">status = #{status},</if>
+            <if test="remark != null">remark = #{remark},</if>
+        </set>
+        where key_id = #{keyId}
+    </update>
+
+    <update id="updateSecret">
+        update ai_apikey set api_key = #{apiKey} where key_id = #{keyId}
+    </update>
+
+    <delete id="deleteByIds">
+        delete from ai_apikey where key_id in
+        <foreach collection="keyIds" item="keyId" open="(" separator="," close=")">#{keyId}</foreach>
+    </delete>
+</mapper>

@@ -1,0 +1,130 @@
+# ============================================
+# cpa-external 生产环境 Docker Compose（服务器使用）
+#
+# 应用镜像由 GitHub Actions 自动构建并推送到 ghcr.io，
+# 服务器执行 deploy-server.sh update 拉取最新镜像即可，无需源码和 jar。
+# 前端为独立发布的静态文件，由宿主机 Caddy 直接托管，不在本文件管理范围。
+# Web 入口（80/443、HTTPS 证书）同样由宿主机 Caddy 负责。
+# 部署说明见同目录 DEPLOY.md。
+# ============================================
+
+networks:
+  cpa-external-net:
+    driver: bridge
+
+services:
+  # ---- MySQL 数据库 ----
+  mysql:
+    image: mysql:8.0.29
+    container_name: cpa-external-mysql
+    restart: unless-stopped
+    environment:
+      LANG: en_US.UTF-8
+      TZ: Asia/Shanghai
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-cpa_external}
+    # 仅绑定宿主机回环地址，公网不可见；远程运维走 SSH 隧道
+    ports:
+      - "127.0.0.1:3306:3306"
+    volumes:
+      - ./mysql/conf/my.cnf:/etc/my.cnf
+      - ./mysql/data:/var/lib/mysql
+      - ./mysql/init:/docker-entrypoint-initdb.d
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "mysqladmin",
+          "ping",
+          "-h",
+          "localhost",
+          "-u",
+          "root",
+          "-p${MYSQL_ROOT_PASSWORD}",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - cpa-external-net
+
+  # ---- Redis 缓存 ----
+  redis:
+    image: redis:7.2.3
+    container_name: cpa-external-redis
+    restart: unless-stopped
+    command: redis-server /etc/redis/redis.conf --requirepass ${REDIS_PASSWORD} --appendonly no
+    environment:
+      - TZ=Asia/Shanghai
+    # 仅绑定宿主机回环地址，公网不可见；远程运维走 SSH 隧道
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - ./redis/data:/data
+      - ./redis/conf/redis.conf:/etc/redis/redis.conf
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - cpa-external-net
+
+  # ---- 应用服务（Spring Boot，镜像来自 GHCR）----
+  cpa-external:
+    image: ghcr.io/${GHCR_OWNER:-benchengchai-coder}/cpa-external:${IMAGE_TAG:-latest}
+    container_name: cpa-external
+    restart: unless-stopped
+    ulimits:
+      nofile:
+        soft: 65535
+        hard: 65535
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    # 供宿主机 Caddy 反向代理，仅绑定回环地址，公网不可见
+    ports:
+      - "127.0.0.1:8080:8080"
+    environment:
+      # JVM 参数按机器规格在 .env 中调整，不再固化进镜像
+      JAVA_TOOL_OPTIONS: ${JAVA_OPTS:--Xms512m -Xmx2048m}
+      SPRING_DATASOURCE_DRUID_MASTER_URL: jdbc:mysql://mysql:3306/${MYSQL_DATABASE:-cpa_external}?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+      SPRING_DATASOURCE_DRUID_MASTER_USERNAME: root
+      SPRING_DATASOURCE_DRUID_MASTER_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
+      SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD}
+      SPRING_DATA_REDIS_DATABASE: 1
+      RUOYI_PROFILE: ${UPLOAD_PATH:-/home/ruoyi/uploadPath}
+      TOKEN_SECRET: ${TOKEN_SECRET}
+      RUOYI_MAIL_SECRET: ${RUOYI_MAIL_SECRET}
+      CPA_CLIPROXY_USAGE_SUBSCRIPTION_ENABLED: ${CPA_CLIPROXY_USAGE_SUBSCRIPTION_ENABLED:-false}
+      CPA_CLIPROXY_USAGE_HOST: ${CPA_CLIPROXY_USAGE_HOST:-host.docker.internal}
+      CPA_CLIPROXY_USAGE_PORT: ${CPA_CLIPROXY_USAGE_PORT:-8317}
+      CPA_CLIPROXY_MANAGEMENT_KEY: ${CPA_CLIPROXY_MANAGEMENT_KEY:-}
+      CPA_CLIPROXY_APIKEY_PUSH_ENABLED: ${CPA_CLIPROXY_APIKEY_PUSH_ENABLED:-false}
+      CPA_CLIPROXY_USAGE_TLS: ${CPA_CLIPROXY_USAGE_TLS:-false}
+      CPA_BILLING_API_TOKEN: ${CPA_BILLING_API_TOKEN:-}
+      CPA_BILLING_RESERVATION_TIMEOUT_SECONDS: ${CPA_BILLING_RESERVATION_TIMEOUT_SECONDS:-7200}
+      CPA_BILLING_SETTLE_DELAY_SECONDS: ${CPA_BILLING_SETTLE_DELAY_SECONDS:-10}
+      ALIPAY_SANDBOX: ${ALIPAY_SANDBOX:-false}
+      ALIPAY_APP_ID: ${ALIPAY_APP_ID:-}
+      ALIPAY_APP_PRIVATE_KEY: ${ALIPAY_APP_PRIVATE_KEY:-}
+      ALIPAY_PUBLIC_KEY: ${ALIPAY_PUBLIC_KEY:-}
+      ALIPAY_NOTIFY_URL: ${ALIPAY_NOTIFY_URL:-}
+      ALIPAY_RETURN_URL: ${ALIPAY_RETURN_URL:-}
+    volumes:
+      - ./uploads:${UPLOAD_PATH:-/home/ruoyi/uploadPath}
+      - ./logs:/home/ruoyi/logs   # 容器内的日志目录挂载到相对compose.yml的./logs
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 90s
+    networks:
+      - cpa-external-net

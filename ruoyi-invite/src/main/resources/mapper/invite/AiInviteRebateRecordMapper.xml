@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.invite.mapper.AiInviteRebateRecordMapper">
+
+    <resultMap type="AiInviteRebateRecord" id="AiInviteRebateRecordResult">
+        <id     property="recordId"      column="record_id" />
+        <result property="inviterId"     column="inviter_id" />
+        <result property="inviterUserName" column="inviter_user_name" />
+        <result property="inviteeId"     column="invitee_id" />
+        <result property="inviteeUserName" column="invitee_user_name" />
+        <result property="action"        column="action" />
+        <result property="amount"        column="amount" />
+        <result property="sourceType"    column="source_type" />
+        <result property="sourceId"      column="source_id" />
+        <result property="balanceAfter"  column="balance_after" />
+        <result property="frozenUntil"   column="frozen_until" />
+        <result property="createBy"      column="create_by" />
+        <result property="createTime"    column="create_time" />
+        <result property="updateBy"      column="update_by" />
+        <result property="updateTime"    column="update_time" />
+        <result property="remark"        column="remark" />
+    </resultMap>
+
+    <resultMap type="com.ruoyi.invite.domain.vo.InviteeVO" id="InviteeVOResult">
+        <result property="userId"      column="user_id" />
+        <result property="username"    column="user_name" />
+        <result property="email"       column="email" />
+        <result property="totalRebate" column="total_rebate" />
+        <result property="createTime"  column="create_time" />
+    </resultMap>
+
+    <sql id="selectAiInviteRebateRecordVo">
+        select r.record_id, r.inviter_id, inviter.user_name as inviter_user_name,
+               r.invitee_id, invitee.user_name as invitee_user_name,
+               r.action, r.amount, r.source_type, r.source_id,
+               r.balance_after, r.frozen_until, r.create_by, r.create_time,
+               r.update_by, r.update_time, r.remark
+        from ai_invite_rebate_record r
+        left join sys_user inviter on inviter.user_id = r.inviter_id
+        left join sys_user invitee on invitee.user_id = r.invitee_id
+    </sql>
+
+    <!-- 幂等插入产生返利流水：唯一索引 uk_source(source_type, source_id) 防重 -->
+    <insert id="insertAccrueIgnore" parameterType="AiInviteRebateRecord">
+        insert ignore into ai_invite_rebate_record
+        (inviter_id, invitee_id, action, amount, source_type, source_id, frozen_until, create_time)
+        values
+        (#{inviterId}, #{inviteeId}, #{action}, #{amount}, #{sourceType}, #{sourceId}, #{frozenUntil}, sysdate())
+    </insert>
+
+    <insert id="insertClaim" parameterType="AiInviteRebateRecord" useGeneratedKeys="true" keyProperty="recordId">
+        insert into ai_invite_rebate_record
+        (inviter_id, invitee_id, action, amount, balance_after, create_time)
+        values
+        (#{inviterId}, null, #{action}, #{amount}, #{balanceAfter}, sysdate())
+    </insert>
+
+    <!-- 回填领取流水的余额快照（聚合层加完余额后调用） -->
+    <update id="updateClaimBalanceAfter">
+        update ai_invite_rebate_record
+        set balance_after = #{balanceAfter}
+        where record_id = #{recordId} and action = '2'
+    </update>
+
+    <!-- 统计并清零到期冻结流水：先汇总再更新为已解冻 -->
+    <select id="sumAndClearThawAmount" resultType="java.math.BigDecimal">
+        select coalesce(sum(amount), 0) from ai_invite_rebate_record
+        where inviter_id = #{inviterId} and action = '1' and frozen_until is not null and frozen_until &lt;= now()
+    </select>
+
+    <select id="sumAccruedByInvitee" resultType="java.math.BigDecimal">
+        select coalesce(sum(amount), 0) from ai_invite_rebate_record
+        where inviter_id = #{inviterId} and invitee_id = #{inviteeId} and action = '1'
+    </select>
+
+    <!-- 将到期冻结流水置空 frozen_until，防止重复解冻汇总 -->
+    <update id="clearThawFlag">
+        update ai_invite_rebate_record
+        set frozen_until = null
+        where inviter_id = #{inviterId} and action = '1'
+          and frozen_until is not null and frozen_until &lt;= now()
+    </update>
+
+    <!-- 被邀请人列表：关联 sys_user 取用户名邮箱，邮箱脱敏，每人贡献返利合计 -->
+    <select id="selectInviteeList" resultMap="InviteeVOResult">
+        select a.invitee_id as user_id, u.user_name, u.email,
+               coalesce(sum(a.amount), 0) as total_rebate,
+               min(a.create_time) as create_time
+        from ai_invite_rebate_record a
+        left join sys_user u on u.user_id = a.invitee_id
+        where a.inviter_id = #{inviterId} and a.action = '1'
+        group by a.invitee_id, u.user_name, u.email
+        order by create_time desc
+        limit #{limit}
+    </select>
+
+    <select id="selectRecordList" parameterType="AiInviteRebateRecord" resultMap="AiInviteRebateRecordResult">
+        <include refid="selectAiInviteRebateRecordVo"/>
+        <where>
+            <if test="inviterId != null">and r.inviter_id = #{inviterId}</if>
+            <if test="action != null and action != ''">and r.action = #{action}</if>
+            <if test="sourceType != null and sourceType != ''">and r.source_type = #{sourceType}</if>
+        </where>
+        order by r.record_id desc
+    </select>
+
+</mapper>

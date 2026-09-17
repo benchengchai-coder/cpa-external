@@ -1,0 +1,219 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.cpaexternal.billing.mapper.CpaBillingRecordMapper">
+
+    <resultMap type="CpaBillingRecord" id="CpaBillingRecordResult">
+        <id property="billingId" column="billing_id" />
+        <result property="requestId" column="request_id" />
+        <result property="userId" column="user_id" />
+        <result property="keyId" column="key_id" />
+        <result property="subscriptionId" column="subscription_id" />
+        <result property="subscriptionPlanTitle" column="subscription_plan_title" />
+        <result property="billingSource" column="billing_source" />
+        <result property="billingPreference" column="billing_preference" />
+        <result property="amount" column="amount" />
+        <result property="reservedAmount" column="reserved_amount" />
+        <result property="walletReservedAmount" column="wallet_reserved_amount" />
+        <result property="subscriptionReservedAmount" column="subscription_reserved_amount" />
+        <result property="keyReservedAmount" column="key_reserved_amount" />
+        <result property="walletChargedAmount" column="wallet_charged_amount" />
+        <result property="subscriptionChargedAmount" column="subscription_charged_amount" />
+        <result property="keyChargedAmount" column="key_charged_amount" />
+        <result property="uncoveredAmount" column="uncovered_amount" />
+        <result property="reserveExpireTime" column="reserve_expire_time" />
+        <result property="status" column="status" />
+        <result property="logId" column="log_id" />
+        <result property="errorMessage" column="error_message" />
+        <result property="resolutionReason" column="resolution_reason" />
+        <result property="resolvedBy" column="resolved_by" />
+        <result property="resolvedTime" column="resolved_time" />
+        <result property="createTime" column="create_time" />
+        <result property="updateTime" column="update_time" />
+    </resultMap>
+
+    <sql id="selectCpaBillingRecordVo">
+        select billing_id, request_id, user_id, key_id, subscription_id, subscription_plan_title, billing_source,
+               billing_preference, amount, reserved_amount, wallet_reserved_amount,
+               subscription_reserved_amount, key_reserved_amount, wallet_charged_amount,
+               subscription_charged_amount, key_charged_amount, uncovered_amount,
+               reserve_expire_time, status, log_id, error_message, resolution_reason,
+               resolved_by, resolved_time, create_time, update_time
+        from ai_billing_record
+    </sql>
+
+    <select id="selectByRequestId" parameterType="String" resultMap="CpaBillingRecordResult">
+        <include refid="selectCpaBillingRecordVo"/>
+        where request_id = #{requestId}
+    </select>
+
+    <select id="selectByRequestIdForUpdate" parameterType="String" resultMap="CpaBillingRecordResult">
+        <include refid="selectCpaBillingRecordVo"/>
+        where request_id = #{requestId}
+        for update
+    </select>
+
+    <select id="selectByIdForUpdate" parameterType="Long" resultMap="CpaBillingRecordResult">
+        <include refid="selectCpaBillingRecordVo"/>
+        where billing_id = #{billingId}
+        for update
+    </select>
+
+    <select id="selectExpiredReservedIds" resultType="java.lang.Long">
+        select b.billing_id
+        from ai_billing_record b
+        where b.status = 'reserved'
+          and b.reserve_expire_time &lt;= sysdate()
+          and not exists (
+              select 1
+              from ai_billing_settlement_task t
+              where t.billing_id = b.billing_id
+          )
+        order by b.reserve_expire_time asc, b.billing_id asc
+        limit #{limit}
+    </select>
+
+    <select id="selectPendingWithoutTask" resultType="java.lang.Long">
+        select b.billing_id
+        from ai_billing_record b
+        where b.status = 'pending_settlement'
+          and not exists (
+              select 1
+              from ai_billing_settlement_task t
+              where t.billing_id = b.billing_id
+          )
+        order by b.billing_id asc
+        limit #{limit}
+    </select>
+
+    <select id="selectReservedWithLogWithoutTask" resultType="java.lang.Long">
+        select b.billing_id
+        from ai_billing_record b
+        where b.status = 'reserved'
+          and b.create_time &lt; #{beforeTime}
+          and not exists (
+              select 1
+              from ai_billing_settlement_task t
+              where t.billing_id = b.billing_id
+          )
+          and exists (
+              select 1
+              from ai_log l
+              where l.request_id = b.request_id
+          )
+        order by b.billing_id asc
+        limit #{limit}
+    </select>
+
+    <insert id="insertIgnore" parameterType="CpaBillingRecord" useGeneratedKeys="true" keyProperty="billingId">
+        insert ignore into ai_billing_record
+        (request_id, user_id, key_id, amount, reserved_amount, wallet_reserved_amount,
+         subscription_reserved_amount, key_reserved_amount, wallet_charged_amount,
+         subscription_charged_amount, key_charged_amount, uncovered_amount, status, create_time)
+        values
+        (#{requestId}, #{userId}, #{keyId}, #{amount}, #{reservedAmount}, #{walletReservedAmount},
+         #{subscriptionReservedAmount}, #{keyReservedAmount}, #{walletChargedAmount},
+         #{subscriptionChargedAmount}, #{keyChargedAmount}, #{uncoveredAmount}, #{status}, sysdate())
+    </insert>
+
+    <update id="updateReserved" parameterType="CpaBillingRecord">
+        update ai_billing_record
+        set subscription_id = #{subscriptionId},
+            subscription_plan_title = #{subscriptionPlanTitle},
+            billing_preference = #{billingPreference},
+            reserved_amount = #{reservedAmount},
+            wallet_reserved_amount = #{walletReservedAmount},
+            subscription_reserved_amount = #{subscriptionReservedAmount},
+            key_reserved_amount = #{keyReservedAmount},
+            reserve_expire_time = #{reserveExpireTime},
+            status = 'reserved',
+            error_message = null,
+            update_time = sysdate()
+        where request_id = #{requestId}
+          and status = 'processing'
+    </update>
+
+    <update id="updatePendingSettlement" parameterType="CpaBillingRecord">
+        update ai_billing_record
+        set amount = #{amount},
+            status = 'pending_settlement',
+            error_message = null,
+            update_time = sysdate(3)
+        where request_id = #{requestId}
+          and status = 'reserved'
+    </update>
+
+    <update id="updateSettlementFromPending" parameterType="CpaBillingRecord">
+        update ai_billing_record
+        set billing_source = #{billingSource},
+            wallet_charged_amount = #{walletChargedAmount},
+            subscription_charged_amount = #{subscriptionChargedAmount},
+            key_charged_amount = #{keyChargedAmount},
+            uncovered_amount = #{uncoveredAmount},
+            status = #{status},
+            error_message = #{errorMessage},
+            update_time = sysdate(3)
+        where billing_id = #{billingId}
+          and status = 'pending_settlement'
+    </update>
+
+    <update id="updateTerminal">
+        update ai_billing_record
+        set status = #{status},
+            error_message = #{errorMessage},
+            update_time = sysdate()
+        where billing_id = #{billingId}
+          and status = 'reserved'
+    </update>
+
+    <update id="updateWrittenOff">
+        update ai_billing_record
+        set billing_source = 'write_off',
+            uncovered_amount = amount,
+            status = 'written_off',
+            resolution_reason = #{resolutionReason},
+            resolved_by = #{resolvedBy},
+            resolved_time = sysdate(3),
+            update_time = sysdate(3)
+        where billing_id = #{billingId}
+          and status in ('reserved', 'pending_settlement')
+          and wallet_charged_amount = 0
+          and subscription_charged_amount = 0
+          and key_charged_amount = 0
+    </update>
+
+    <update id="updateLogId">
+        update ai_billing_record
+        set log_id = #{logId}, update_time = sysdate()
+        where request_id = #{requestId}
+          and log_id is null
+    </update>
+
+    <select id="selectUserAmountSummary" parameterType="Long"
+            resultType="com.ruoyi.cpaexternal.billing.domain.vo.CpaBillingAmountSummaryVO">
+        select ifnull(sum(ifnull(wallet_charged_amount, 0)
+                          + ifnull(subscription_charged_amount, 0)), 0) as totalChargedAmount,
+               ifnull(sum(ifnull(uncovered_amount, 0)), 0) as totalUncoveredAmount
+        from ai_billing_record
+        where user_id = #{userId}
+          and status in ('success', 'partial')
+    </select>
+
+    <!-- 并发计数对账：计数列与 reserved 在途账单数不一致的用户，供补偿任务告警；
+         子查询仅扫描在途账单（数量被并发上限封顶），走 idx_ai_billing_user_status_create 前缀 -->
+    <select id="selectConcurrencyDrift"
+            resultType="com.ruoyi.cpaexternal.billing.domain.vo.CpaBillingConcurrencyDriftVO">
+        select u.user_id as userId,
+               u.active_request_count as counterCount,
+               ifnull(r.recordCount, 0) as recordCount
+        from sys_user u
+        left join (
+            select user_id, count(*) as recordCount
+            from ai_billing_record
+            where status = 'reserved'
+            group by user_id
+        ) r on r.user_id = u.user_id
+        where u.active_request_count &lt;&gt; ifnull(r.recordCount, 0)
+    </select>
+</mapper>

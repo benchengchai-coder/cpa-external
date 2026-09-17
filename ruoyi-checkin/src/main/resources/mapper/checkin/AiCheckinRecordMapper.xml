@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.checkin.mapper.AiCheckinRecordMapper">
+
+    <resultMap type="AiCheckinRecord" id="AiCheckinRecordResult">
+        <id     property="checkinId"    column="checkin_id" />
+        <result property="userId"       column="user_id" />
+        <result property="username"     column="username" />
+        <result property="checkinDate"  column="checkin_date" />
+        <result property="rewardAmount" column="reward_amount" />
+        <result property="balanceAfter" column="balance_after" />
+        <result property="status"       column="status" />
+        <result property="createBy"     column="create_by" />
+        <result property="createTime"   column="create_time" />
+        <result property="updateBy"     column="update_by" />
+        <result property="updateTime"   column="update_time" />
+        <result property="remark"       column="remark" />
+    </resultMap>
+
+    <sql id="selectAiCheckinRecordVo">
+        select checkin_id, user_id, username, checkin_date, reward_amount, balance_after, status,
+               create_by, create_time, update_by, update_time, remark
+        from ai_checkin_record
+    </sql>
+
+    <select id="selectByUserAndDate" resultMap="AiCheckinRecordResult">
+        <include refid="selectAiCheckinRecordVo"/>
+        where user_id = #{userId}
+          and checkin_date = #{checkinDate}
+        limit 1
+    </select>
+
+    <select id="selectSignedDatesByMonth" resultType="String">
+        select date_format(checkin_date, '%Y-%m-%d')
+        from ai_checkin_record
+        where user_id = #{userId}
+          and status = '0'
+          and checkin_date &gt;= #{startDate}
+          and checkin_date &lt; #{endDate}
+        order by checkin_date asc
+    </select>
+
+    <insert id="insertCheckinRecord" parameterType="AiCheckinRecord" useGeneratedKeys="true" keyProperty="checkinId">
+        insert into ai_checkin_record
+        <trim prefix="(" suffix=")" suffixOverrides=",">
+            user_id,
+            username,
+            checkin_date,
+            reward_amount,
+            <if test="balanceAfter != null">balance_after,</if>
+            status,
+            <if test="createBy != null and createBy != ''">create_by,</if>
+            <if test="remark != null and remark != ''">remark,</if>
+            create_time
+        </trim>
+        <trim prefix="values (" suffix=")" suffixOverrides=",">
+            #{userId},
+            #{username},
+            #{checkinDate},
+            #{rewardAmount},
+            <if test="balanceAfter != null">#{balanceAfter},</if>
+            #{status},
+            <if test="createBy != null and createBy != ''">#{createBy},</if>
+            <if test="remark != null and remark != ''">#{remark},</if>
+            sysdate()
+        </trim>
+    </insert>
+
+    <update id="updateBalanceAfter">
+        update ai_checkin_record
+        set balance_after = #{balanceAfter},
+            update_time = sysdate()
+        where checkin_id = #{checkinId}
+    </update>
+
+</mapper>

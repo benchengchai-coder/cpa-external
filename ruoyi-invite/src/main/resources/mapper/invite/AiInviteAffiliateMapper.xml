@@ -1,0 +1,135 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.invite.mapper.AiInviteAffiliateMapper">
+
+    <resultMap type="AiInviteAffiliate" id="AiInviteAffiliateResult">
+        <id     property="userId"         column="user_id" />
+        <result property="userName"       column="user_name" />
+        <result property="inviteCode"     column="invite_code" />
+        <result property="inviterId"      column="inviter_id" />
+        <result property="inviterUserName" column="inviter_user_name" />
+        <result property="inviteCount"    column="invite_count" />
+        <result property="pendingRebate"  column="pending_rebate" />
+        <result property="frozenRebate"   column="frozen_rebate" />
+        <result property="historyRebate"  column="history_rebate" />
+        <result property="rebateRate"     column="rebate_rate" />
+        <result property="createBy"       column="create_by" />
+        <result property="createTime"     column="create_time" />
+        <result property="updateBy"       column="update_by" />
+        <result property="updateTime"     column="update_time" />
+        <result property="remark"         column="remark" />
+    </resultMap>
+
+    <sql id="selectAiInviteAffiliateVo">
+        select user_id, invite_code, inviter_id, invite_count, pending_rebate, frozen_rebate,
+               history_rebate, rebate_rate, create_by, create_time, update_by, update_time, remark
+        from ai_invite_affiliate
+    </sql>
+
+    <select id="selectByUserId" parameterType="Long" resultMap="AiInviteAffiliateResult">
+        <include refid="selectAiInviteAffiliateVo"/>
+        where user_id = #{userId}
+    </select>
+
+    <select id="selectByUserIdForUpdate" parameterType="Long" resultMap="AiInviteAffiliateResult">
+        <include refid="selectAiInviteAffiliateVo"/>
+        where user_id = #{userId}
+        for update
+    </select>
+
+    <select id="selectByCode" parameterType="String" resultMap="AiInviteAffiliateResult">
+        <include refid="selectAiInviteAffiliateVo"/>
+        where invite_code = #{inviteCode}
+    </select>
+
+    <insert id="insertAffiliate" parameterType="AiInviteAffiliate">
+        insert into ai_invite_affiliate
+        <trim prefix="(" suffix=")" suffixOverrides=",">
+            user_id,
+            invite_code,
+            <if test="inviterId != null">inviter_id,</if>
+            <if test="rebateRate != null">rebate_rate,</if>
+            <if test="createBy != null and createBy != ''">create_by,</if>
+            <if test="remark != null">remark,</if>
+            create_time
+        </trim>
+        <trim prefix="values (" suffix=")" suffixOverrides=",">
+            #{userId},
+            #{inviteCode},
+            <if test="inviterId != null">#{inviterId},</if>
+            <if test="rebateRate != null">#{rebateRate},</if>
+            <if test="createBy != null and createBy != ''">#{createBy},</if>
+            <if test="remark != null">#{remark},</if>
+            sysdate()
+        </trim>
+    </insert>
+
+    <!-- 条件绑定：仅当 inviter_id 为空时绑定，并发幂等 -->
+    <update id="bindInviter">
+        update ai_invite_affiliate
+        set inviter_id = #{inviterId}, update_time = sysdate()
+        where user_id = #{userId} and inviter_id is null
+    </update>
+
+    <update id="incrementInviteCount">
+        update ai_invite_affiliate
+        set invite_count = invite_count + 1, update_time = sysdate()
+        where user_id = #{inviterId}
+    </update>
+
+    <!-- 累加返利：待领取/冻结/历史同步更新 -->
+    <update id="addRebate">
+        update ai_invite_affiliate
+        set pending_rebate = pending_rebate + #{pendingDelta},
+            frozen_rebate = frozen_rebate + #{frozenDelta},
+            history_rebate = history_rebate + #{pendingDelta} + #{frozenDelta},
+            update_time = sysdate()
+        where user_id = #{userId}
+    </update>
+
+    <!-- 解冻：冻结额转待领取 -->
+    <update id="thawFrozen">
+        update ai_invite_affiliate
+        set frozen_rebate = frozen_rebate - #{thawDelta},
+            pending_rebate = pending_rebate + #{thawDelta},
+            update_time = sysdate()
+        where user_id = #{userId}
+    </update>
+
+    <!-- 条件清零待领取：仅当大于 0 时清零，并发安全 -->
+    <update id="clearPending">
+        update ai_invite_affiliate
+        set pending_rebate = 0, update_time = sysdate()
+        where user_id = #{userId} and pending_rebate > 0
+    </update>
+
+    <update id="updateRebateRate">
+        update ai_invite_affiliate
+        set rebate_rate = #{rebateRate}, update_time = sysdate()
+        where user_id = #{userId}
+    </update>
+
+    <update id="updateInviteCode">
+        update ai_invite_affiliate
+        set invite_code = #{inviteCode}, update_time = sysdate()
+        where user_id = #{userId}
+    </update>
+
+    <select id="selectAffiliateList" parameterType="AiInviteAffiliate" resultMap="AiInviteAffiliateResult">
+        select a.user_id, u.user_name, a.invite_code, a.inviter_id,
+               inviter.user_name as inviter_user_name, a.invite_count, a.pending_rebate,
+               a.frozen_rebate, a.history_rebate, a.rebate_rate, a.create_by,
+               a.create_time, a.update_by, a.update_time, a.remark
+        from ai_invite_affiliate a
+        left join sys_user u on u.user_id = a.user_id
+        left join sys_user inviter on inviter.user_id = a.inviter_id
+        <where>
+            <if test="inviteCode != null and inviteCode != ''">and a.invite_code like concat('%', #{inviteCode}, '%')</if>
+            <if test="inviterId != null">and a.inviter_id = #{inviterId}</if>
+        </where>
+        order by a.user_id desc
+    </select>
+
+</mapper>

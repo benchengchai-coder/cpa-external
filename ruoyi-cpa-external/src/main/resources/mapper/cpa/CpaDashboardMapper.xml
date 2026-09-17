@@ -1,0 +1,227 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.cpaexternal.dashboard.mapper.CpaDashboardMapper">
+
+    <!-- 概览：平台总数（ai_channel 已随中继代码移除，以平台数替代渠道数口径） -->
+    <select id="countPlatforms" resultType="int">
+        select count(*) from ai_platform where status = '0'
+    </select>
+
+    <!-- 概览：模型总数 -->
+    <select id="countModels" resultType="int">
+        select count(*) from ai_model where status = '0'
+    </select>
+
+    <!-- 概览：用户总数 -->
+    <select id="countUsers" resultType="int">
+        select count(*) from sys_user where del_flag = '0'
+    </select>
+
+    <!-- 概览：今日新增用户数 -->
+    <select id="countTodayNewUsers" resultType="int">
+        select count(*) from sys_user
+        where del_flag = '0'
+          and create_time &gt;= curdate()
+          and create_time &lt; date_add(curdate(), interval 1 day)
+    </select>
+
+    <!-- 概览：API Key 总数 -->
+    <select id="countApiKeys" resultType="int">
+        select count(*) from ai_apikey
+    </select>
+
+    <!-- 概览：今日请求数 -->
+    <select id="countTodayRequests" resultType="int">
+        select count(*) from ai_log
+        where create_time &gt;= curdate()
+          and create_time &lt; date_add(curdate(), interval 1 day)
+    </select>
+
+    <!-- 概览：最近一分钟请求数（RPM），走 idx_create_time -->
+    <select id="countRequestsPerMinute" resultType="int">
+        select count(*) from ai_log
+        where create_time &gt;= date_sub(now(), interval 1 minute)
+    </select>
+
+    <!-- 概览：今日 Token 消耗总量 -->
+    <select id="sumTodayTokens" resultType="long">
+        select ifnull(sum(total_tokens), 0)
+        from ai_log
+        where create_time &gt;= curdate()
+          and create_time &lt; date_add(curdate(), interval 1 day)
+    </select>
+
+    <!-- 概览：历史 Token 消耗总量 -->
+    <select id="sumTotalTokens" resultType="long">
+        select ifnull(sum(total_tokens), 0) from ai_log
+    </select>
+
+    <!-- 概览：今日计算费用 -->
+    <select id="sumTodayCost" resultType="java.math.BigDecimal">
+        select ifnull(sum(cost), 0)
+        from ai_log
+        where create_time &gt;= curdate()
+          and create_time &lt; date_add(curdate(), interval 1 day)
+    </select>
+
+    <!-- 概览：今日实扣（账单创建日归属；实扣口径与账单金额汇总一致：success/partial） -->
+    <select id="sumTodayChargedAmount" resultType="java.math.BigDecimal">
+        select ifnull(sum(ifnull(wallet_charged_amount, 0) + ifnull(subscription_charged_amount, 0)), 0)
+        from ai_billing_record
+        where status in ('success', 'partial')
+          and create_time &gt;= curdate()
+          and create_time &lt; date_add(curdate(), interval 1 day)
+    </select>
+
+    <!-- 概览：最近7天成功调用平均响应时间（毫秒），走 idx_failed_time -->
+    <select id="avgRecentSuccessDuration" resultType="java.math.BigDecimal">
+        select ifnull(round(sum(latency_ms) / nullif(count(*), 0), 2), 0)
+        from ai_log
+        where failed = 0
+          and create_time &gt;= date_sub(now(), interval 7 day)
+    </select>
+
+    <!-- 概览：最近7天成功调用平均首 Token 响应时间（毫秒） -->
+    <select id="avgRecentSuccessFirstTokenTime" resultType="java.math.BigDecimal">
+        select ifnull(round(avg(ttft_ms), 2), 0)
+        from ai_log
+        where failed = 0
+          and ttft_ms &gt; 0
+          and create_time &gt;= date_sub(now(), interval 7 day)
+    </select>
+
+    <!-- 调用趋势：今日按小时聚合，其余按天聚合；区间上界固定为今日结束，补零由前端完成 -->
+    <select id="selectTrend" resultType="com.ruoyi.cpaexternal.dashboard.domain.vo.DashboardTrendVO">
+        <choose>
+            <when test="mode == 'today'">
+                select date_format(create_time, '%H:00') as date,
+                       count(*) as requestCount,
+                       ifnull(sum(total_tokens), 0) as totalTokens,
+                       ifnull(sum(cost), 0) as cost
+                from ai_log
+                where create_time &gt;= curdate()
+                  and create_time &lt; date_add(curdate(), interval 1 day)
+                <if test="userId != null">
+                    and user_id = #{userId}
+                </if>
+                group by date_format(create_time, '%H:00')
+                order by date asc
+            </when>
+            <otherwise>
+                select date_format(create_time, '%Y-%m-%d') as date,
+                       count(*) as requestCount,
+                       ifnull(sum(total_tokens), 0) as totalTokens,
+                       ifnull(sum(cost), 0) as cost
+                from ai_log
+                where create_time &gt;= #{startDate}
+                  and create_time &lt; date_add(curdate(), interval 1 day)
+                <if test="userId != null">
+                    and user_id = #{userId}
+                </if>
+                group by date_format(create_time, '%Y-%m-%d')
+                order by date asc
+            </otherwise>
+        </choose>
+    </select>
+
+    <!-- 用户实扣排行总人数：日志调用与实扣账单任一来源出现即计入 -->
+    <select id="countUserRank" resultType="long">
+        select count(*)
+        from (
+            select user_id
+            from ai_log
+            where user_id is not null
+            <if test="startDate != null">
+              and create_time &gt;= #{startDate}
+              and create_time &lt; date_add(curdate(), interval 1 day)
+            </if>
+            group by user_id
+            union
+            select user_id
+            from ai_billing_record
+            where status in ('success', 'partial')
+            <if test="startDate != null">
+              and create_time &gt;= #{startDate}
+              and create_time &lt; date_add(curdate(), interval 1 day)
+            </if>
+            group by user_id
+        ) ranked_users
+    </select>
+
+    <!-- 用户实扣排行：日志侧聚合调用与Token，账单侧聚合实扣，再按用户合并 -->
+    <select id="selectUserRank" resultType="com.ruoyi.cpaexternal.dashboard.domain.vo.DashboardUserRankVO">
+        select t.user_id as userId,
+               ifnull(nullif(u.user_name, ''), concat('用户#', t.user_id)) as username,
+               sum(t.request_count) as requestCount,
+               sum(t.total_tokens) as totalTokens,
+               sum(t.charged_amount) as totalChargedAmount
+        from (
+            select user_id, count(*) as request_count,
+                   ifnull(sum(total_tokens), 0) as total_tokens,
+                   0 as charged_amount
+            from ai_log
+            where user_id is not null
+            <if test="startDate != null">
+              and create_time &gt;= #{startDate}
+              and create_time &lt; date_add(curdate(), interval 1 day)
+            </if>
+            group by user_id
+            union all
+            select user_id, 0 as request_count, 0 as total_tokens,
+                   ifnull(sum(ifnull(wallet_charged_amount, 0) + ifnull(subscription_charged_amount, 0)), 0) as charged_amount
+            from ai_billing_record
+            where status in ('success', 'partial')
+            <if test="startDate != null">
+              and create_time &gt;= #{startDate}
+              and create_time &lt; date_add(curdate(), interval 1 day)
+            </if>
+            group by user_id
+        ) t
+        left join sys_user u on u.user_id = t.user_id
+        group by t.user_id, u.user_name
+        order by totalChargedAmount desc, requestCount desc, t.user_id asc
+        limit #{limit} offset #{offset}
+    </select>
+
+    <!-- 用户：今日请求数，走 idx_user_time -->
+    <select id="countUserTodayRequests" resultType="int">
+        select count(*) from ai_log
+        where user_id = #{userId}
+          and create_time &gt;= curdate()
+          and create_time &lt; date_add(curdate(), interval 1 day)
+    </select>
+
+    <!-- 用户：Token 消耗总量 -->
+    <select id="sumUserTokens" resultType="long">
+        select ifnull(sum(total_tokens), 0)
+        from ai_log
+        where user_id = #{userId}
+    </select>
+
+    <!-- 用户：API Key 数量 -->
+    <select id="countUserApiKeys" resultType="int">
+        select count(*) from ai_apikey where user_id = #{userId} and status = '0'
+    </select>
+
+    <!-- 用户：最近7天成功调用平均响应时间（毫秒） -->
+    <select id="avgRecentUserSuccessDuration" resultType="java.math.BigDecimal">
+        select ifnull(round(sum(latency_ms) / nullif(count(*), 0), 2), 0)
+        from ai_log
+        where user_id = #{userId}
+          and failed = 0
+          and create_time &gt;= date_sub(now(), interval 7 day)
+    </select>
+
+    <!-- 用户：最近7天成功调用平均首 Token 响应时间（毫秒） -->
+    <select id="avgRecentUserSuccessFirstTokenTime" resultType="java.math.BigDecimal">
+        select ifnull(round(avg(ttft_ms), 2), 0)
+        from ai_log
+        where user_id = #{userId}
+          and failed = 0
+          and ttft_ms &gt; 0
+          and create_time &gt;= date_sub(now(), interval 7 day)
+    </select>
+
+</mapper>

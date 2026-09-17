@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.cpaexternal.subscription.mapper.AiSubscriptionRecordMapper">
+
+    <resultMap type="AiSubscriptionRecord" id="AiSubscriptionRecordResult">
+        <id     property="recordId"           column="record_id" />
+        <result property="userId"             column="user_id" />
+        <result property="username"           column="username" />
+        <result property="planId"             column="plan_id" />
+        <result property="planTitle"          column="plan_title" />
+        <result property="userSubscriptionId" column="user_subscription_id" />
+        <result property="type"               column="type" />
+        <result property="amount"             column="amount" />
+        <result property="sourceName"         column="source_name" />
+        <result property="operatorName"       column="operator_name" />
+        <result property="status"             column="status" />
+        <result property="createBy"           column="create_by" />
+        <result property="createTime"         column="create_time" />
+        <result property="updateBy"           column="update_by" />
+        <result property="updateTime"         column="update_time" />
+        <result property="remark"             column="remark" />
+    </resultMap>
+
+    <sql id="selectAiSubscriptionRecordVo">
+        select record_id, user_id, username, plan_id, plan_title, user_subscription_id, type,
+               amount, source_name, operator_name, status, create_by, create_time, update_by, update_time, remark
+        from ai_subscription_record
+    </sql>
+
+    <select id="selectAiSubscriptionRecordList" parameterType="AiSubscriptionRecord" resultMap="AiSubscriptionRecordResult">
+        <include refid="selectAiSubscriptionRecordVo"/>
+        <where>
+            <if test="userId != null">and user_id = #{userId}</if>
+            <if test="username != null and username != ''">and username like concat('%', #{username}, '%')</if>
+            <if test="planTitle != null and planTitle != ''">and plan_title like concat('%', #{planTitle}, '%')</if>
+            <if test="type != null and type != ''">and type = #{type}</if>
+            <if test="status != null and status != ''">and status = #{status}</if>
+            <if test="params.beginTime != null and params.beginTime != ''">
+                and date_format(create_time,'%Y%m%d') &gt;= date_format(#{params.beginTime},'%Y%m%d')
+            </if>
+            <if test="params.endTime != null and params.endTime != ''">
+                and date_format(create_time,'%Y%m%d') &lt;= date_format(#{params.endTime},'%Y%m%d')
+            </if>
+        </where>
+        order by record_id desc
+    </select>
+
+    <insert id="insertAiSubscriptionRecord" parameterType="AiSubscriptionRecord" useGeneratedKeys="true" keyProperty="recordId">
+        insert into ai_subscription_record
+        <trim prefix="(" suffix=")" suffixOverrides=",">
+            <if test="userId != null">user_id,</if>
+            <if test="username != null">username,</if>
+            <if test="planId != null">plan_id,</if>
+            <if test="planTitle != null">plan_title,</if>
+            <if test="userSubscriptionId != null">user_subscription_id,</if>
+            <if test="type != null">type,</if>
+            <if test="amount != null">amount,</if>
+            <if test="sourceName != null">source_name,</if>
+            <if test="operatorName != null">operator_name,</if>
+            <if test="status != null">status,</if>
+            <if test="createBy != null and createBy != ''">create_by,</if>
+            <if test="remark != null">remark,</if>
+            create_time
+        </trim>
+        <trim prefix="values (" suffix=")" suffixOverrides=",">
+            <if test="userId != null">#{userId},</if>
+            <if test="username != null">#{username},</if>
+            <if test="planId != null">#{planId},</if>
+            <if test="planTitle != null">#{planTitle},</if>
+            <if test="userSubscriptionId != null">#{userSubscriptionId},</if>
+            <if test="type != null">#{type},</if>
+            <if test="amount != null">#{amount},</if>
+            <if test="sourceName != null">#{sourceName},</if>
+            <if test="operatorName != null">#{operatorName},</if>
+            <if test="status != null">#{status},</if>
+            <if test="createBy != null and createBy != ''">#{createBy},</if>
+            <if test="remark != null">#{remark},</if>
+            sysdate()
+        </trim>
+    </insert>
+</mapper>

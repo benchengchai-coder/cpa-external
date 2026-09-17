@@ -1,0 +1,150 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.cpaexternal.log.mapper.CpaAiLogMapper">
+    <resultMap id="CpaAiLogResult" type="com.ruoyi.cpaexternal.log.domain.CpaAiLog">
+        <id property="logId" column="log_id" />
+        <result property="timestamp" column="timestamp" />
+        <result property="latencyMs" column="latency_ms" />
+        <result property="ttftMs" column="ttft_ms" />
+        <result property="source" column="source" />
+        <result property="authIndex" column="auth_index" />
+        <result property="accessTokenSha256" column="access_token_sha256" />
+        <result property="clientIp" column="client_ip" />
+        <result property="xForwardedFor" column="x_forwarded_for" />
+        <result property="userAgent" column="user_agent" />
+        <result property="inputTokens" column="input_tokens" />
+        <result property="outputTokens" column="output_tokens" />
+        <result property="reasoningTokens" column="reasoning_tokens" />
+        <result property="cachedTokens" column="cached_tokens" />
+        <result property="cacheReadTokens" column="cache_read_tokens" />
+        <result property="cacheReadTokensPresent" column="cache_read_tokens_present" />
+        <result property="cacheCreationTokens" column="cache_creation_tokens" />
+        <result property="totalTokens" column="total_tokens" />
+        <result property="failed" column="failed" />
+        <result property="generate" column="generate" />
+        <result property="stream" column="stream" />
+        <result property="fail" column="fail" />
+        <result property="accountingVersion" column="accounting_version" />
+        <result property="tokenBreakdown" column="token_breakdown" />
+        <result property="provider" column="provider" />
+        <result property="executorType" column="executor_type" />
+        <result property="model" column="model" />
+        <result property="alias" column="alias" />
+        <result property="endpoint" column="endpoint" />
+        <result property="authType" column="auth_type" />
+        <result property="apiKey" column="api_key" />
+        <result property="requestId" column="request_id" />
+        <result property="sessionId" column="session_id" />
+        <result property="parentSessionId" column="parent_session_id" />
+        <result property="reasoningEffort" column="reasoning_effort" />
+        <result property="serviceTier" column="service_tier" />
+        <result property="responseServiceTier" column="response_service_tier" />
+        <result property="responseHeaders" column="response_headers" />
+        <result property="userId" column="user_id" />
+        <result property="keyId" column="key_id" />
+        <result property="username" column="username" />
+        <result property="keyName" column="key_name" />
+        <result property="billingMultiplier" column="billing_multiplier" />
+        <result property="cost" column="cost" />
+        <result property="createTime" column="create_time" />
+    </resultMap>
+
+    <sql id="columns">
+        select log_id, `timestamp`, latency_ms, ttft_ms, source, auth_index,
+               access_token_sha256, client_ip, x_forwarded_for, user_agent,
+               input_tokens, output_tokens, reasoning_tokens, cached_tokens,
+               cache_read_tokens, cache_read_tokens_present, cache_creation_tokens, total_tokens,
+               failed, `generate`, `stream`, `fail`, accounting_version, token_breakdown,
+               provider, executor_type, model, `alias`, endpoint, auth_type, api_key,
+               request_id, session_id, parent_session_id, reasoning_effort,
+               service_tier, response_service_tier,
+               response_headers, user_id, key_id, username, key_name, billing_multiplier, cost, create_time
+        from ai_log
+    </sql>
+
+    <select id="selectById" resultMap="CpaAiLogResult">
+        <include refid="columns" /> where log_id = #{logId}
+    </select>
+
+    <select id="selectByRequestId" resultMap="CpaAiLogResult">
+        <include refid="columns" /> where request_id = #{requestId} limit 1
+    </select>
+
+    <select id="selectList" parameterType="com.ruoyi.cpaexternal.log.domain.CpaAiLog" resultMap="CpaAiLogResult">
+        <include refid="columns" />
+        <where>
+            <if test="userId != null">and user_id = #{userId}</if>
+            <if test="requestId != null and requestId != ''">and request_id like concat('%', #{requestId}, '%')</if>
+            <if test="username != null and username != ''">
+                and (username like concat('%', #{username}, '%') or source like concat('%', #{username}, '%'))
+            </if>
+            <if test="provider != null and provider != ''">and provider = #{provider}</if>
+            <if test="modelName != null and modelName != ''">and model = #{modelName}</if>
+            <!-- status 是响应兼容别名（getter 会按 failed 兜底计算，永不返回 null），查询条件必须用 failed 字段，否则"不传状态"会被当成"只查成功" -->
+            <if test="failed != null">and failed = #{failed}</if>
+        </where>
+        order by `timestamp` desc, log_id desc
+    </select>
+
+    <insert id="insert" parameterType="com.ruoyi.cpaexternal.log.domain.CpaAiLog" useGeneratedKeys="true" keyProperty="logId">
+        insert into ai_log
+        (`timestamp`, latency_ms, ttft_ms, source, auth_index,
+         access_token_sha256, client_ip, x_forwarded_for, user_agent,
+         input_tokens, output_tokens, reasoning_tokens, cached_tokens,
+         cache_read_tokens, cache_read_tokens_present, cache_creation_tokens, total_tokens,
+         failed, `generate`, `stream`, `fail`, accounting_version, token_breakdown,
+         provider, executor_type, model, `alias`, endpoint, auth_type, api_key,
+         request_id, session_id, parent_session_id, reasoning_effort,
+         service_tier, response_service_tier,
+         response_headers, user_id, key_id, username, key_name, billing_multiplier, cost, create_time)
+        values
+        (#{timestamp,jdbcType=TIMESTAMP}, #{latencyMs}, #{ttftMs}, #{source}, #{authIndex},
+         #{accessTokenSha256}, #{clientIp}, #{xForwardedFor}, #{userAgent},
+         #{inputTokens}, #{outputTokens}, #{reasoningTokens}, #{cachedTokens},
+         #{cacheReadTokens}, #{cacheReadTokensPresent}, #{cacheCreationTokens}, #{totalTokens},
+         #{failed}, #{generate}, #{stream}, #{fail}, #{accountingVersion}, #{tokenBreakdown},
+         #{provider}, #{executorType}, #{model}, #{alias}, #{endpoint}, #{authType}, #{apiKey},
+         #{requestId}, #{sessionId}, #{parentSessionId}, #{reasoningEffort},
+         #{serviceTier}, #{responseServiceTier},
+         #{responseHeaders}, #{userId}, #{keyId}, #{username}, #{keyName}, #{billingMultiplier}, #{cost}, sysdate())
+    </insert>
+
+    <update id="updateUsageByRequestId" parameterType="com.ruoyi.cpaexternal.log.domain.CpaAiLog">
+        update ai_log
+        set `timestamp` = #{timestamp,jdbcType=TIMESTAMP},
+            latency_ms = #{latencyMs},
+            ttft_ms = #{ttftMs},
+            input_tokens = #{inputTokens},
+            output_tokens = #{outputTokens},
+            reasoning_tokens = #{reasoningTokens},
+            cached_tokens = #{cachedTokens},
+            cache_read_tokens = #{cacheReadTokens},
+            cache_read_tokens_present = #{cacheReadTokensPresent},
+            cache_creation_tokens = #{cacheCreationTokens},
+            total_tokens = #{totalTokens},
+            failed = #{failed},
+            `generate` = #{generate},
+            `stream` = #{stream},
+            `fail` = #{fail},
+            accounting_version = #{accountingVersion},
+            token_breakdown = #{tokenBreakdown},
+            provider = #{provider},
+            executor_type = #{executorType},
+            model = #{model},
+            `alias` = #{alias},
+            reasoning_effort = #{reasoningEffort},
+            service_tier = #{serviceTier},
+            response_service_tier = #{responseServiceTier},
+            response_headers = #{responseHeaders},
+            cost = #{cost}
+        where request_id = #{requestId}
+          and failed = 1
+    </update>
+
+    <delete id="deleteByIds">
+        delete from ai_log where log_id in
+        <foreach collection="logIds" item="logId" open="(" separator="," close=")">#{logId}</foreach>
+    </delete>
+</mapper>

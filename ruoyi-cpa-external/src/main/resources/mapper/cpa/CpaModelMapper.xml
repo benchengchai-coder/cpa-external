@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.cpaexternal.model.mapper.CpaModelMapper">
+    <resultMap id="CpaModelResult" type="com.ruoyi.cpaexternal.model.domain.CpaModel">
+        <id property="modelId" column="model_id" />
+        <result property="modelName" column="model_name" />
+        <result property="description" column="description" />
+        <result property="icon" column="icon" />
+        <result property="platform" column="platform" />
+        <result property="officialInputPrice" column="official_input_price" />
+        <result property="officialOutputPrice" column="official_output_price" />
+        <result property="officialCacheReadPrice" column="official_cache_read_price" />
+        <result property="officialCacheWritePrice" column="official_cache_write_price" />
+        <result property="status" column="status" />
+        <result property="createBy" column="create_by" />
+        <result property="createTime" column="create_time" />
+        <result property="updateBy" column="update_by" />
+        <result property="updateTime" column="update_time" />
+        <result property="remark" column="remark" />
+    </resultMap>
+
+    <sql id="columns">
+        select model_id, model_name, description, icon, platform,
+               official_input_price, official_output_price, official_cache_read_price,
+               official_cache_write_price, status, create_by, create_time,
+               update_by, update_time, remark
+        from ai_model
+    </sql>
+
+    <select id="selectById" resultMap="CpaModelResult">
+        <include refid="columns" /> where model_id = #{modelId}
+    </select>
+
+    <select id="selectByName" resultMap="CpaModelResult">
+        <include refid="columns" /> where model_name = #{modelName} and status = '0'
+    </select>
+
+    <select id="selectPricingByName" resultMap="CpaModelResult">
+        <include refid="columns" /> where model_name = #{modelName} limit 1
+    </select>
+
+    <select id="selectList" parameterType="com.ruoyi.cpaexternal.model.domain.CpaModel" resultMap="CpaModelResult">
+        <include refid="columns" />
+        <where>
+            <if test="modelName != null and modelName != ''">and model_name like concat('%', #{modelName}, '%')</if>
+            <if test="platform != null and platform != ''">and platform = #{platform}</if>
+            <if test="status != null and status != ''">and status = #{status}</if>
+        </where>
+        order by model_id asc
+    </select>
+
+    <insert id="insert" parameterType="com.ruoyi.cpaexternal.model.domain.CpaModel" useGeneratedKeys="true" keyProperty="modelId">
+        insert into ai_model
+        (model_name, description, icon, platform, official_input_price, official_output_price,
+         official_cache_read_price, official_cache_write_price, status, create_by, remark, create_time)
+        values
+        (#{modelName}, #{description}, #{icon}, #{platform}, #{officialInputPrice}, #{officialOutputPrice},
+         #{officialCacheReadPrice}, #{officialCacheWritePrice}, #{status}, #{createBy}, #{remark}, sysdate())
+    </insert>
+
+    <update id="update" parameterType="com.ruoyi.cpaexternal.model.domain.CpaModel">
+        update ai_model
+        <set>
+            <if test="modelName != null and modelName != ''">model_name = #{modelName},</if>
+            <if test="description != null">description = #{description},</if>
+            <if test="icon != null">icon = #{icon},</if>
+            <if test="platform != null and platform != ''">platform = #{platform},</if>
+            <if test="officialInputPrice != null">official_input_price = #{officialInputPrice},</if>
+            <if test="officialOutputPrice != null">official_output_price = #{officialOutputPrice},</if>
+            <if test="officialCacheReadPrice != null">official_cache_read_price = #{officialCacheReadPrice},</if>
+            <if test="officialCacheWritePrice != null">official_cache_write_price = #{officialCacheWritePrice},</if>
+            <if test="status != null and status != ''">status = #{status},</if>
+            <if test="updateBy != null and updateBy != ''">update_by = #{updateBy},</if>
+            <if test="remark != null">remark = #{remark},</if>
+            update_time = sysdate()
+        </set>
+        where model_id = #{modelId}
+    </update>
+
+    <delete id="deleteByIds">
+        delete from ai_model where model_id in
+        <foreach collection="modelIds" item="modelId" open="(" separator="," close=")">#{modelId}</foreach>
+    </delete>
+
+</mapper>

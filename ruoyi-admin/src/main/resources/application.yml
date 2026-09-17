@@ -1,0 +1,238 @@
+# 项目相关配置
+ruoyi:
+  # 名称
+  name: RuoYi
+  # 版本
+  version: 3.9.2
+  # 版权年份
+  copyrightYear: 2026
+  # 文件路径 示例（ Windows配置D:/ruoyi/uploadPath，Linux配置 /home/ruoyi/uploadPath）
+  profile: D:/ruoyi/uploadPath
+  # 获取ip地址开关
+  addressEnabled: false
+  # 验证码类型 math 数字计算 char 字符验证
+  captchaType: math
+  # 邮件敏感配置加密密钥，生产环境请通过环境变量覆盖
+  mail:
+    secret: ${RUOYI_MAIL_SECRET:ruoyi-mail-secret-change-me}
+
+# 文件服务配置
+file:
+  storage:
+    # 存储类型：local 本地存储（默认） | minio 对象存储
+    type: local
+
+# Minio 对象存储配置（仅 file.storage.type=minio 时生效）
+minio:
+  url: http://127.0.0.1:9000
+  access-key: minioadmin
+  secret-key: minioadmin
+  bucket-name: ruoyi
+
+# 独立扩展业务配置
+cpa:
+  cli-proxy:
+    usage-subscription:
+      # 订阅 CLIProxyAPI Redis RESP usage 通道；协议说明见 https://help.router-for.me/cn/management/redis-usage-queue
+      enabled: ${CPA_CLIPROXY_USAGE_SUBSCRIPTION_ENABLED:true}
+      # CLIProxyAPI HTTP API 与 RESP 复用同一主机和端口，默认端口为 8317
+      host: ${CPA_CLIPROXY_USAGE_HOST:127.0.0.1}
+      port: ${CPA_CLIPROXY_USAGE_PORT:8317}
+      # 与 /v0/management 使用相同的 Management Key；启用订阅时不能为空
+      management-key: ${CPA_CLIPROXY_MANAGEMENT_KEY:Cbc940209,.}
+      # CLIProxyAPI 监听器启用 TLS 时，此处也必须启用
+      tls: ${CPA_CLIPROXY_USAGE_TLS:false}
+      connect-timeout: ${CPA_CLIPROXY_USAGE_CONNECT_TIMEOUT:5s}
+      read-timeout: ${CPA_CLIPROXY_USAGE_READ_TIMEOUT:30s}
+      reconnect-delay: ${CPA_CLIPROXY_USAGE_RECONNECT_DELAY:5s}
+      max-reconnect-delay: ${CPA_CLIPROXY_USAGE_MAX_RECONNECT_DELAY:1m}
+      # 建立订阅后，同时分批补收订阅建立前暂存在 FIFO 队列中的记录
+      backlog-batch-size: ${CPA_CLIPROXY_USAGE_BACKLOG_BATCH_SIZE:50}
+      max-payload-bytes: ${CPA_CLIPROXY_USAGE_MAX_PAYLOAD_BYTES:1048576}
+    errors-subscription:
+      # 订阅 CLIProxyAPI Redis RESP errors 通道（上游失败事件）；连接参数复用上方 usage-subscription 配置。
+      # 注意：errors 通道只向在线订阅者实时推送、没有积压暂存，订阅断线期间的事件无法补收
+      enabled: ${CPA_CLIPROXY_ERRORS_SUBSCRIPTION_ENABLED:true}
+      # 失败事件保留天数与清理任务参数（每日定时分批删除过期事件）
+      retention-days: ${CPA_CLIPROXY_ERRORS_RETENTION_DAYS:3}
+      cleanup-cron: ${CPA_CLIPROXY_ERRORS_CLEANUP_CRON:0 30 1 * * *}
+      cleanup-zone: ${CPA_CLIPROXY_ERRORS_CLEANUP_ZONE:Asia/Shanghai}
+      cleanup-batch-size: ${CPA_CLIPROXY_ERRORS_CLEANUP_BATCH_SIZE:2000}
+      cleanup-max-batches: ${CPA_CLIPROXY_ERRORS_CLEANUP_MAX_BATCHES:50}
+    management:
+      # API Key 推送同步开关：开启后平台侧 Key 新增/轮换/删除/停启用会写入 CLIProxyAPI 的 api-keys 列表（热加载生效）
+      api-key-push-enabled: ${CPA_CLIPROXY_APIKEY_PUSH_ENABLED:true}
+      # 与 usage-subscription 复用同一台 CLIProxyAPI
+      host: ${CPA_CLIPROXY_USAGE_HOST:127.0.0.1}
+      port: ${CPA_CLIPROXY_USAGE_PORT:8317}
+      management-key: ${CPA_CLIPROXY_MANAGEMENT_KEY:Cbc940209,.}
+      tls: ${CPA_CLIPROXY_USAGE_TLS:false}
+      connect-timeout: ${CPA_CLIPROXY_USAGE_CONNECT_TIMEOUT:5s}
+      read-timeout: ${CPA_CLIPROXY_USAGE_READ_TIMEOUT:30s}
+  billing:
+    # 公开计费 API 的鉴权 Token（请求头 X-Billing-Token）；为空时 /aigate/billing/reserve|release|check 拒绝所有请求
+    api-token: ${CPA_BILLING_API_TOKEN:Cbc940209,.}
+    # 预占超时时间（秒），超时未结算的预占由定时任务释放
+    reservation-timeout-seconds: ${CPA_BILLING_RESERVATION_TIMEOUT_SECONDS:3600}
+    # usage 落库后到结算任务可领取的延迟窗口（秒），聚合凭据重试产生的多条 usage
+    settle-delay-seconds: ${CPA_BILLING_SETTLE_DELAY_SECONDS:5}
+    # 异步结算 Worker（预占-结算的唯一路径，正常部署必须开启）
+    settlement-worker-enabled: ${CPA_BILLING_SETTLEMENT_WORKER_ENABLED:true}
+    settlement-worker-threads: ${CPA_BILLING_SETTLEMENT_WORKER_THREADS:4}
+    settlement-claim-batch-size: ${CPA_BILLING_SETTLEMENT_CLAIM_BATCH_SIZE:100}
+    settlement-max-retries: ${CPA_BILLING_SETTLEMENT_MAX_RETRIES:10}
+  pay:
+    alipay:
+      # 是否沙箱环境
+      sandbox: ${ALIPAY_SANDBOX:false}
+      # 支付宝应用 ID
+      app-id: ${ALIPAY_APP_ID:2021006166618044}
+      # 应用私钥（PKCS8，去掉头尾与换行）
+      app-private-key: ${ALIPAY_APP_PRIVATE_KEY:MIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQCwsrwBD5yv0nITcUnmsv6q9WpT322/QzVn4c3ZgihMlBPLAN9AcVQYOZkiKp+b/3lsVgt/FvO2JB4bxAKR0pB99NLobyZyxwFraKC7EXcQ2s5GI4F5AI++a6Uzo+/YAlqRjyDejzWKggPhnJKp0znZ+ZQhtVg78YuuzUTxcHZZYMkzDBdM0/ukbiMJE8bkSRWX4KVxXbj2ISK9lyKYziAh4fX8B9llPrk23VfjV2wCcm9WkVAEMcyUkIl5StJ3aXpDgt4N2aABuI5LbyiXVgGJPQFw5/Kk/59PD7qB9jaMwimkJJVv0HeBJIdR43KEtRS2qjwbfDNCHpg6KYIaLDqvAgMBAAECggEAEVrs1lnXNPnBlKFK9erc0qPaNrS6Tc/nHfXyxwtes+7TZtwGEYlQDjUSEmYHWUYlgfuNk4UImPpBLs74xaPd51E1qfjI2Pss64TSTK1xeWlUW1U/cUgZ1kUya7kNZLUOej+JpfKA+sK8aNt9GEsT4pH997WdHf4ijx/ARsqaBTsvli3Nbz86axCoxqdydJMIGii4aIg3cO+PL35tYUF3xtfHx9mA+yDAirnY7NiJqvUkR/Kq+bsBWiVfzQqhkSe7zSZsyJca0XqBHXqWiheYXFqYQWGyt3mCGaFXci6rRIlccjXL0LThkvCCkCc3kkqvmDx/tfH/OWCngT9WRbGuKQKBgQDeFBKfskzTo27NFRf3hE6BevwtzZHhNVp3flUdRHLx3vJ21wTTFNvA1qQhere1cPrqrsYwy6FJikM8imCqV+HJqBAQjq2ePPrVsKIoigRO5aIdcjjD/6MfA7Ke1FW8lxWyxMCRfKik0Sb+Gus4FaHtG9m8CxM6s0XhYb+QvXPGxQKBgQDLsCjZRuem29lclQsoLj8x34jGVbPm+poKxdDCuixzF1NLdUvZtOVt4KAmwGDGxlQxX5Kw9mNKPhfuYhyFbqkZNQgP/eJBxnA5svP5YiSzKHqIhk1YCitm6mL9teT7e432HTk4yMXRgGHbHV3P3p6iBSfqv+MjS8JePdV13/ay4wKBgD3kiEA7uA+v19yOSWyxUhPiC9BUH5kNfpYY/m22uvZP9XFLgcu2X3yCFaJDClomD7hCV3gX+G5/ezevNTukXIgQL9H9gcO9KQdPQBJeTM8UTrc4MzvkzjiBllGPyglSbjixfx3NCU9N/zkIlY++768eePNgfs54Ujx7OqGDO3YlAoGAJ6ehHEPwn4yXsa2WoXj3dqc1Qp+2yZYqXUSL0w1Z0AJPhhZM8RKFxDGCHGlBrhE4nPAlZ+xgAjk6gX96XAPiSfUIH8zmurV+bc1IMFoKGRMdX+z9q9E3B+9D3G8IKGmyhqLD3ClCUfozkuwRsoF90r88OTioaNu7+IsDPtKefc8CgYA/Px5e+iqEavfsQodFS4mQJ6UUc0Zh5/DkbP0U47FGkw8Gm8Np5eVST+58Gky4oiFSDHAx/JWeOAP/eii/wh+p39eefYcsnttvZPPDBL6XWYWNO2+bRtSpZ6mTFSivnzVukCmLrPT8TGHla8tfJyyF4ARijmq/MhTWl84C99+88A==}
+      # 支付宝公钥（异步通知验签）
+      alipay-public-key: ${ALIPAY_PUBLIC_KEY:MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA3aKQGY8AKa3v5vbpA9hGfvfWTjjzJqJfNI+sAyLGt8T2it2W9xxo2hYsAivTOYrHk9EfmVOtZa2L7Kz28s4UIW4TdPTMmywBZE+7JsAjHqgS46johrU4dQTu+QtTKfAm8kvyc0cwvb85rGVvYRCLDca5I8CsK6B4pdTP5myoEkGDYzqwlRNOPSgO/lgsANw/Hy78CMgL6qtSJjdgDv6NjWa/9n3xjpZWr2+h9Ud3btwDgEuyZPbMTvrm0OHTEVbhhPbnlhewAsiHKGWmvzPqgSt6kStIxZYtyKb9KBnl0KXa5+cJnxsnUWvY5E3shoaNh7vq1cfqKQJP+kdG4H4PIQIDAQAB}
+      sign-type: RSA2
+      # 异步通知地址，支付宝服务器直接 POST，必须经网关反代到后端，故带 /prod-api 前缀
+      notify-url: ${ALIPAY_NOTIFY_URL:https://cbc.icu/prod-api/aigate/pay/alipay/notify}
+      # 同步回跳地址（浏览器跳前端结果页），前端为 SPA 不带 /prod-api 前缀
+      return-url: ${ALIPAY_RETURN_URL:https://cbc.icu/pay/result}
+      # 订单超时关闭时间（分钟）
+      order-expire-minutes: 10
+      # 订单补偿扫描间隔（秒）
+      compensate-interval-seconds: 60
+
+# 开发环境配置
+server:
+  # 服务器的HTTP端口，默认为8080
+  port: 8080
+  servlet:
+    # 应用的访问路径
+    context-path: /
+  tomcat:
+    # tomcat的URI编码
+    uri-encoding: UTF-8
+    # 连接数满后的排队数，默认为100
+    accept-count: 3000
+    threads:
+      # tomcat最大线程数，默认为200
+      max: 800
+      # Tomcat启动初始化的线程数，默认值10
+      min-spare: 100
+
+# 日志配置
+logging:
+  level:
+    com.ruoyi: info
+    org.springframework: warn
+    com.alibaba.druid.filter.stat: info   # 加这行
+
+# 用户配置
+user:
+  password:
+    # 密码最大错误次数
+    maxRetryCount: 5
+    # 密码锁定时间（默认10分钟）
+    lockTime: 10
+
+# Spring配置
+spring:
+  # 资源信息
+  messages:
+    # 国际化资源文件路径
+    basename: i18n/messages
+  profiles:
+    active: druid
+  # 文件上传
+  servlet:
+    multipart:
+      # 单个文件大小
+      max-file-size: 100MB
+      # 设置总上传的文件大小
+      max-request-size: 100MB
+  jackson:
+    time-zone: GMT+8
+    date-format: yyyy-MM-dd HH:mm:ss
+  threads:
+    virtual:
+      enabled: true
+  # 服务模块
+  devtools:
+    restart:
+      # 热部署开关
+      enabled: true
+  data:
+    # redis 配置
+    redis:
+      # 地址
+      host: localhost
+      # 端口，默认为6379
+      port: 6379
+      # 数据库索引
+      database: 1
+      # 密码
+      password: hld
+      # 连接超时时间
+      timeout: 10s
+      lettuce:
+        pool:
+          # 连接池中的最小空闲连接
+          min-idle: 0
+          # 连接池中的最大空闲连接
+          max-idle: 8
+          # 连接池的最大数据库连接数
+          max-active: 50
+          # #连接池最大阻塞等待时间（使用负值表示没有限制）
+          max-wait: -1ms
+
+# token配置
+token:
+  # 令牌自定义标识
+  header: Authorization
+  # 令牌密钥
+  secret: abcdefghijklmnopqrstuvwxyz
+  # 令牌有效期（默认30分钟）
+  expireTime: 60
+
+# MyBatis配置
+mybatis:
+  # 搜索指定包别名
+  typeAliasesPackage: com.ruoyi.**.domain
+  # 配置mapper的扫描，找到所有的mapper.xml映射文件
+  mapperLocations: classpath*:mapper/**/*Mapper.xml
+  # 加载全局的配置文件
+  configLocation: classpath:mybatis/mybatis-config.xml
+
+# PageHelper分页插件
+pagehelper:
+  helperDialect: mysql
+  supportMethodsArguments: true
+  params: count=countSql
+
+# Springdoc配置
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    enabled: true
+    path: /swagger-ui.html
+    tags-sorter: alpha
+  group-configs:
+    - group: 'default'
+      display-name: '测试模块'
+      paths-to-match: '/**'
+      packages-to-scan: com.ruoyi.web.controller.tool
+
+# 防盗链配置
+referer:
+  # 防盗链开关
+  enabled: false
+  # 允许的域名列表
+  allowed-domains: localhost,127.0.0.1,cbc.icu,www.cbc.icu
+# 防止XSS攻击
+xss:
+  # 过滤开关
+  enabled: true
+  # 排除链接（多个用逗号分隔）
+  excludes: /system/notice
+  # 匹配链接
+  urlPatterns: /system/*,/monitor/*,/tool/*

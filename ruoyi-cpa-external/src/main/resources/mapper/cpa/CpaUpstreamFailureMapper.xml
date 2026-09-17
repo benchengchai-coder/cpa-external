@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.cpaexternal.log.mapper.CpaUpstreamFailureMapper">
+    <resultMap id="CpaUpstreamFailureResult" type="com.ruoyi.cpaexternal.log.domain.CpaUpstreamFailure">
+        <id property="failureId" column="failure_id" />
+        <result property="eventTime" column="event_time" />
+        <result property="provider" column="provider" />
+        <result property="model" column="model" />
+        <result property="authId" column="auth_id" />
+        <result property="authIndex" column="auth_index" />
+        <result property="statusCode" column="status_code" />
+        <result property="body" column="body" />
+        <result property="code" column="code" />
+        <result property="retryable" column="retryable" />
+        <result property="authStatus" column="auth_status" />
+        <result property="authDisabled" column="auth_disabled" />
+        <result property="authUnavailable" column="auth_unavailable" />
+        <result property="authNextRetryAt" column="auth_next_retry_at" />
+        <result property="quotaExceeded" column="quota_exceeded" />
+        <result property="quotaReason" column="quota_reason" />
+        <result property="authStatusSnapshot" column="auth_status_snapshot" />
+        <result property="createTime" column="create_time" />
+    </resultMap>
+
+    <sql id="columns">
+        select failure_id, event_time, provider, model, auth_id, auth_index, status_code, body,
+               code, retryable, auth_status, auth_disabled, auth_unavailable, auth_next_retry_at,
+               quota_exceeded, quota_reason, auth_status_snapshot, create_time
+        from ai_upstream_failure
+    </sql>
+
+    <select id="selectById" resultMap="CpaUpstreamFailureResult">
+        <include refid="columns" /> where failure_id = #{failureId}
+    </select>
+
+    <select id="selectList" parameterType="com.ruoyi.cpaexternal.log.domain.CpaUpstreamFailure" resultMap="CpaUpstreamFailureResult">
+        <include refid="columns" />
+        <where>
+            <if test="provider != null and provider != ''">and provider = #{provider}</if>
+            <if test="model != null and model != ''">and model = #{model}</if>
+            <if test="authId != null and authId != ''">and auth_id = #{authId}</if>
+            <if test="authIndex != null and authIndex != ''">and auth_index like concat('%', #{authIndex}, '%')</if>
+            <if test="statusCode != null">and status_code = #{statusCode}</if>
+            <if test="retryable != null">and retryable = #{retryable}</if>
+            <if test="authUnavailable != null">and auth_unavailable = #{authUnavailable}</if>
+            <if test="quotaExceeded != null">and quota_exceeded = #{quotaExceeded}</if>
+            <if test="params.beginTime != null and params.beginTime != ''">and event_time &gt;= #{params.beginTime}</if>
+            <if test="params.endTime != null and params.endTime != ''">and event_time &lt;= #{params.endTime}</if>
+        </where>
+        order by event_time desc, failure_id desc
+    </select>
+
+    <insert id="insert" parameterType="com.ruoyi.cpaexternal.log.domain.CpaUpstreamFailure" useGeneratedKeys="true" keyProperty="failureId">
+        insert into ai_upstream_failure
+        (event_time, provider, model, auth_id, auth_index, status_code, body,
+         code, retryable, auth_status, auth_disabled, auth_unavailable, auth_next_retry_at,
+         quota_exceeded, quota_reason, auth_status_snapshot, create_time)
+        values
+        (#{eventTime,jdbcType=TIMESTAMP}, #{provider}, #{model}, #{authId}, #{authIndex}, #{statusCode}, #{body},
+         #{code}, #{retryable}, #{authStatus}, #{authDisabled}, #{authUnavailable}, #{authNextRetryAt,jdbcType=TIMESTAMP},
+         #{quotaExceeded}, #{quotaReason}, #{authStatusSnapshot}, sysdate())
+    </insert>
+
+    <delete id="deleteByIds">
+        delete from ai_upstream_failure where failure_id in
+        <foreach collection="failureIds" item="failureId" open="(" separator="," close=")">#{failureId}</foreach>
+    </delete>
+
+    <delete id="deleteBefore">
+        delete from ai_upstream_failure
+        where event_time &lt; #{beforeTime,jdbcType=TIMESTAMP}
+        limit #{limit}
+    </delete>
+</mapper>

@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.system.mapper.SysMailConfigMapper">
+
+    <resultMap type="SysMailConfig" id="SysMailConfigResult">
+        <id     property="configId"          column="config_id"          />
+        <result property="host"              column="host"               />
+        <result property="port"              column="port"               />
+        <result property="username"          column="username"           />
+        <result property="encryptedPassword" column="encrypted_password" />
+        <result property="fromEmail"         column="from_email"         />
+        <result property="fromName"          column="from_name"          />
+        <result property="sslEnable"         column="ssl_enable"         />
+        <result property="starttlsEnable"    column="starttls_enable"    />
+        <result property="authEnable"        column="auth_enable"        />
+        <result property="enabled"           column="enabled"            />
+        <result property="emailVerifyEnabled" column="email_verify_enable" />
+        <result property="timeout"           column="timeout"            />
+        <result property="createBy"          column="create_by"          />
+        <result property="createTime"        column="create_time"        />
+        <result property="updateBy"          column="update_by"          />
+        <result property="updateTime"        column="update_time"        />
+        <result property="remark"            column="remark"             />
+    </resultMap>
+
+    <sql id="selectMailConfigVo">
+        select config_id, host, port, username, encrypted_password, from_email, from_name,
+               ssl_enable, starttls_enable, auth_enable, enabled, email_verify_enable, timeout,
+               create_by, create_time, update_by, update_time, remark
+        from sys_mail_config
+    </sql>
+
+    <select id="selectMailConfig" resultMap="SysMailConfigResult">
+        <include refid="selectMailConfigVo"/>
+        order by config_id asc limit 1
+    </select>
+
+    <insert id="insertMailConfig" parameterType="SysMailConfig" useGeneratedKeys="true" keyProperty="configId">
+        insert into sys_mail_config (
+            host, port, username, encrypted_password, from_email, from_name,
+            ssl_enable, starttls_enable, auth_enable, enabled, email_verify_enable, timeout,
+            create_by, create_time, remark
+        ) values (
+            #{host}, #{port}, #{username}, #{encryptedPassword}, #{fromEmail}, #{fromName},
+            #{sslEnable}, #{starttlsEnable}, #{authEnable}, #{enabled}, #{emailVerifyEnabled}, #{timeout},
+            #{createBy}, sysdate(), #{remark}
+        )
+    </insert>
+
+    <update id="updateMailConfig" parameterType="SysMailConfig">
+        update sys_mail_config
+        <set>
+            host = #{host},
+            port = #{port},
+            username = #{username},
+            encrypted_password = #{encryptedPassword},
+            from_email = #{fromEmail},
+            from_name = #{fromName},
+            ssl_enable = #{sslEnable},
+            starttls_enable = #{starttlsEnable},
+            auth_enable = #{authEnable},
+            enabled = #{enabled},
+            email_verify_enable = #{emailVerifyEnabled},
+            timeout = #{timeout},
+            update_by = #{updateBy},
+            update_time = sysdate(),
+            remark = #{remark}
+        </set>
+        where config_id = #{configId}
+    </update>
+
+</mapper>

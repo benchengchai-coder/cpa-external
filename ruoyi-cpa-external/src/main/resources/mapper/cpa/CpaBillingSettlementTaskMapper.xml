@@ -1,0 +1,206 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.cpaexternal.billing.mapper.CpaBillingSettlementTaskMapper">
+
+    <resultMap type="CpaBillingSettlementTask" id="CpaBillingSettlementTaskResult">
+        <id property="taskId" column="task_id" />
+        <result property="billingId" column="billing_id" />
+        <result property="requestId" column="request_id" />
+        <result property="userId" column="user_id" />
+        <result property="keyId" column="key_id" />
+        <result property="actualCost" column="actual_cost" />
+        <result property="status" column="status" />
+        <result property="retryCount" column="retry_count" />
+        <result property="availableTime" column="available_time" />
+        <result property="claimToken" column="claim_token" />
+        <result property="claimExpireTime" column="claim_expire_time" />
+        <result property="errorMessage" column="error_message" />
+        <result property="createTime" column="create_time" />
+        <result property="updateTime" column="update_time" />
+    </resultMap>
+
+    <sql id="selectTaskVo">
+        select task_id, billing_id, request_id, user_id, key_id, actual_cost,
+               status, retry_count, available_time, claim_token, claim_expire_time,
+               error_message, create_time, update_time
+        from ai_billing_settlement_task
+    </sql>
+
+    <select id="selectByRequestId" parameterType="String" resultMap="CpaBillingSettlementTaskResult">
+        <include refid="selectTaskVo"/>
+        where request_id = #{requestId}
+    </select>
+
+    <select id="selectByRequestIdForUpdate" parameterType="String" resultMap="CpaBillingSettlementTaskResult">
+        <include refid="selectTaskVo"/>
+        where request_id = #{requestId}
+        for update
+    </select>
+
+    <select id="selectByBillingIdForUpdate" parameterType="Long" resultMap="CpaBillingSettlementTaskResult">
+        <include refid="selectTaskVo"/>
+        where billing_id = #{billingId}
+        for update
+    </select>
+
+    <insert id="insertTask" parameterType="CpaBillingSettlementTask" useGeneratedKeys="true" keyProperty="taskId">
+        insert into ai_billing_settlement_task
+        (billing_id, request_id, user_id, key_id, actual_cost, status,
+         retry_count, available_time, create_time, update_time)
+        values
+        (#{billingId}, #{requestId}, #{userId}, #{keyId}, #{actualCost}, 'pending',
+         0, #{availableTime}, sysdate(3), sysdate(3))
+    </insert>
+
+    <update id="requeueExpiredClaims" parameterType="int">
+        update ai_billing_settlement_task
+        set status = 'pending',
+            available_time = sysdate(3),
+            claim_token = null,
+            claim_expire_time = null,
+            error_message = '领取租约过期，已自动恢复',
+            update_time = sysdate(3)
+        where status = 'claimed'
+          and claim_expire_time &lt;= sysdate(3)
+        order by task_id asc
+        limit #{limit}
+    </update>
+
+    <select id="selectPendingTasksForUpdate" parameterType="int" resultMap="CpaBillingSettlementTaskResult">
+        <include refid="selectTaskVo"/>
+        where status = 'pending'
+          and available_time &lt;= sysdate(3)
+        order by task_id asc
+        limit #{limit}
+        for update skip locked
+    </select>
+
+    <update id="claimTasks">
+        update ai_billing_settlement_task
+        set status = 'claimed',
+            claim_token = #{claimToken},
+            claim_expire_time = #{claimExpireTime},
+            error_message = null,
+            update_time = sysdate(3)
+        where status = 'pending'
+          and task_id in
+        <foreach collection="taskIds" item="taskId" open="(" separator="," close=")">
+            #{taskId}
+        </foreach>
+    </update>
+
+    <update id="markTaskDone">
+        update ai_billing_settlement_task
+        set status = 'done',
+            claim_token = null,
+            claim_expire_time = null,
+            error_message = null,
+            update_time = sysdate(3)
+        where task_id = #{taskId}
+          and status = 'claimed'
+          and claim_token = #{claimToken}
+    </update>
+
+    <update id="markTaskRetry">
+        update ai_billing_settlement_task
+        set status = case when retry_count + 1 &gt;= #{maxRetries}
+                          then 'failed' else 'pending' end,
+            available_time = case when retry_count + 1 &gt;= #{maxRetries}
+                                  then available_time else #{availableTime} end,
+            retry_count = retry_count + 1,
+            claim_token = null,
+            claim_expire_time = null,
+            error_message = #{errorMessage},
+            update_time = sysdate(3)
+        where task_id = #{taskId}
+          and status = 'claimed'
+          and claim_token = #{claimToken}
+    </update>
+
+    <update id="markTaskFailed">
+        update ai_billing_settlement_task
+        set status = 'failed',
+            claim_token = null,
+            claim_expire_time = null,
+            error_message = #{errorMessage},
+            update_time = sysdate(3)
+        where task_id = #{taskId}
+          and status = 'claimed'
+          and claim_token = #{claimToken}
+    </update>
+
+    <update id="retryFailedTask" parameterType="Long">
+        update ai_billing_settlement_task
+        set status = 'pending',
+            retry_count = 0,
+            available_time = sysdate(3),
+            claim_token = null,
+            claim_expire_time = null,
+            error_message = null,
+            update_time = sysdate(3)
+        where task_id = #{taskId}
+          and status = 'failed'
+    </update>
+
+    <update id="markTaskResolved" parameterType="Long">
+        update ai_billing_settlement_task
+        set status = 'resolved',
+            claim_token = null,
+            claim_expire_time = null,
+            update_time = sysdate(3)
+        where task_id = #{taskId}
+          and status = 'failed'
+    </update>
+
+    <delete id="deleteDoneTasksBefore">
+        delete from ai_billing_settlement_task
+        where status = 'done'
+          and update_time &lt; #{beforeTime}
+          and exists (
+              select 1
+              from ai_billing_record b
+              where b.billing_id = ai_billing_settlement_task.billing_id
+                and b.status in ('success', 'partial')
+          )
+        order by task_id asc
+        limit #{limit}
+    </delete>
+
+    <select id="selectFailedTaskList" parameterType="com.ruoyi.cpaexternal.billing.domain.CpaBillingSettlementFailedQuery"
+            resultType="com.ruoyi.cpaexternal.billing.domain.vo.CpaBillingSettlementFailedVO">
+        select t.task_id as taskId,
+               t.billing_id as billingId,
+               t.request_id as requestId,
+               t.user_id as userId,
+               ifnull(nullif(u.user_name, ''), concat('用户#', t.user_id)) as username,
+               t.key_id as keyId,
+               k.key_name as keyName,
+               b.amount as amount,
+               b.wallet_reserved_amount as walletReservedAmount,
+               b.subscription_reserved_amount as subscriptionReservedAmount,
+               b.key_reserved_amount as keyReservedAmount,
+               t.retry_count as retryCount,
+               t.error_message as errorMessage,
+               t.update_time as failedTime
+        from ai_billing_settlement_task t
+        left join ai_billing_record b on b.billing_id = t.billing_id
+        left join sys_user u on u.user_id = t.user_id
+        left join ai_apikey k on k.key_id = t.key_id
+        where t.status = 'failed'
+        <if test="requestId != null and requestId != ''">
+            and t.request_id like concat('%', #{requestId}, '%')
+        </if>
+        <if test="username != null and username != ''">
+            and u.user_name like concat('%', #{username}, '%')
+        </if>
+        order by t.update_time desc, t.task_id desc
+    </select>
+
+    <select id="countFailedTasks" resultType="int">
+        select count(*)
+        from ai_billing_settlement_task
+        where status = 'failed'
+    </select>
+</mapper>
