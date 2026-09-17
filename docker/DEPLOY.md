@@ -24,8 +24,10 @@ host.docker.internal 访问；其自身流量不经过本项目。
   Maven 打包（含测试）→ 构建镜像 → 推送 `ghcr.io/<owner>/cpa-external`
   （`latest` + commit 短哈希 + 版本标签），见 `.github/workflows/build-image.yml`。
   服务器只需 `bash deploy-server.sh update` 拉取更新。
-- **前端**：本地 `npm run build:prod` 产出 `dist`，单独上传到服务器
-  `/opt/cpa-external/frontend`，由宿主机 Caddy 直接托管，与后端镜像互不影响。
+- **前端**：默认分支推送后，GitHub Actions 自动 `npm run build:prod`
+  并 rsync 同步 `dist` 到服务器 `/opt/cpa-external/frontend`（需在仓库
+  Secrets 配置 SSH 信息，见下文），由宿主机 Caddy 直接托管；
+  同步前自动备份旧版本为 `frontend.bak`。
 - **Caddy 装在宿主机**：负责域名、HTTPS 证书、前端静态托管与反向代理，
   与容器生命周期解耦。
 - 所有容器端口只绑定 `127.0.0.1`，公网唯一入口是宿主机 Caddy。
@@ -91,17 +93,33 @@ bash deploy-server.sh update    # 拉取最新镜像并滚动更新容器
 
 ### 前端（只改了页面）
 
-```bash
-cd ruoyi-ui
-npm run build:prod
+前端随 `git push` 自动发布：CI 构建完成后 rsync 同步到服务器目录，完成即生效，
+无需任何手动操作。**前置配置（仅首次）**：
 
-# 上传前建议在服务器备份当前版本（见「回滚」）
-scp -r dist/* user@server:/opt/cpa-external/frontend/
+1. 生成 CI 专用密钥并把公钥加进服务器：
+
+```bash
+ssh-keygen -t ed25519 -f gh_actions_key -N ""
+cat gh_actions_key.pub | ssh user@server "mkdir -p ~/.ssh && cat >> ~/.ssh/authorized_keys"
 ```
 
-上传完成即生效，无需重启任何服务。构建产物带内容哈希，
-旧文件残留不影响访问；定期登录服务器清理即可
-（或两端都有 rsync 时改用 `rsync -av --delete dist/ user@server:/opt/cpa-external/frontend/`）。
+2. 在仓库 **Settings → Secrets and variables → Actions** 添加：
+
+| Secret | 值 |
+|--------|-----|
+| SSH_HOST | 服务器地址（如 43.163.69.198） |
+| SSH_USER | SSH 用户（如 root） |
+| SSH_PRIVATE_KEY | `gh_actions_key` 私钥**全文**（含 BEGIN/END 行） |
+| SSH_PORT | 可选，非 22 端口时配置 |
+
+未配置这些 secrets 时，CI 会跳过前端同步并在日志里提示，后端镜像照常构建。
+
+手动兜底（CI 不可用时）：
+
+```bash
+cd ruoyi-ui && npm run build:prod
+scp -r dist/* user@server:/opt/cpa-external/frontend/
+```
 
 ## 三、回滚
 
@@ -114,14 +132,11 @@ nano .env            # IMAGE_TAG=abc1234（要回滚到的 commit 短哈希）
 bash deploy-server.sh update
 ```
 
-前端：
+前端（CI 每次同步前自动备份为 `frontend.bak`，保留上一个版本）：
 
 ```bash
-# 发版前备份
-ssh user@server "cp -r /opt/cpa-external/frontend /opt/cpa-external/frontend.bak-$(date +%m%d%H%M)"
-
-# 回滚：换回备份目录内容后即生效（无需 reload）
-ssh user@server "rm -rf /opt/cpa-external/frontend && mv /opt/cpa-external/frontend.bak-XXXXXX /opt/cpa-external/frontend"
+# 交换目录即回滚，无需重启任何服务
+ssh user@server "cd /opt/cpa-external && rm -rf frontend.old && mv frontend frontend.old && mv frontend.bak frontend"
 ```
 
 ## 四、常用运维命令

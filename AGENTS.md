@@ -18,7 +18,7 @@ This file provides guidance to Codex (Codex.ai/code) when working with code in t
 
 - 后端：Spring Boot 4.0.3 + Java 21 + MyBatis + Druid + Redis
 - 前端：Vue 3 + TypeScript + Element Plus + Vite（`ruoyi-ui`）
-- 部署：后端镜像由 GitHub Actions 自动构建并推送 ghcr.io（`.github/workflows/build-image.yml`），服务器 `docker/deploy-server.sh update` 拉取更新（MySQL + Redis + cpa-external 三容器）；前端构建产物单独上传到服务器目录，由宿主机 Caddy 直接托管；完整流程见 `docker/DEPLOY.md`
+- 部署：后端镜像由 GitHub Actions 自动构建并推送 ghcr.io（`.github/workflows/build-image.yml`），服务器 `docker/deploy-server.sh update` 拉取更新（MySQL + Redis + cpa-external 三容器）；前端由 CI 构建后 rsync 同步到服务器目录（依赖仓库 SSH secrets），由宿主机 Caddy 直接托管；完整流程见 `docker/DEPLOY.md`
 
 ## 常用命令
 

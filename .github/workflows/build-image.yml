@@ -1,19 +1,26 @@
 # ============================================
-# cpa-external 后端镜像自动构建
+# cpa-external CI：后端镜像构建 + 前端自动部署
 #
-# 触发：任意代码推送、打 v* 标签、或手动触发（workflow_dispatch）
+# 触发：任意代码推送、或手动触发（workflow_dispatch）
 # 标签策略：不写死分支名，latest 仅在默认分支构建时移动，
 #           其他分支只产出 commit 短哈希标签
 # 流程：
 #   1. Maven 构建（含测试）产出 ruoyi-admin.jar
 #   2. 用 docker/cpa-external/Dockerfile 构建镜像
 #   3. 推送到 ghcr.io/<owner>/cpa-external（latest + commit 短哈希 + 版本标签）
-# 服务器侧执行 docker/deploy-server.sh update 即可拉取更新
+#   4. 默认分支上：构建前端 dist 并 rsync 同步到服务器（配置 SSH secrets 后启用）
+# 后端更新：服务器执行 docker/deploy-server.sh update 拉取
+# 前端更新：同步完成即生效（自动备份旧版本为 frontend.bak）
+#
+# 前端同步需要在仓库 Settings → Secrets → Actions 配置：
+#   SSH_HOST（服务器地址）、SSH_USER（如 root）、
+#   SSH_PRIVATE_KEY（私钥全文，公钥需先加入服务器 authorized_keys）、
+#   SSH_PORT（可选，默认 22）
 #
 # 说明：ghcr 私有镜像需要在服务器上 docker login ghcr.io，
 #       或在 GitHub Package 设置里将镜像改为 public
 # ============================================
-name: build-image
+name: build-and-deploy
 
 on:
   push:
@@ -75,3 +82,52 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+
+  # ---- 前端：构建 dist 并 rsync 同步到服务器（仅默认分支）----
+  deploy-frontend:
+    name: 构建前端并同步服务器
+    needs: build-and-push
+    # 前端目录是直接生效的生产产物，只在默认分支同步，避免特性分支覆盖线上
+    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    runs-on: ubuntu-latest
+    concurrency:
+      group: deploy-frontend-${{ github.ref }}
+      # 不取消进行中的同步，避免 rsync 中断导致目录半新半旧
+      cancel-in-progress: false
+    env:
+      SSH_HOST: ${{ secrets.SSH_HOST }}
+      SSH_PORT: ${{ secrets.SSH_PORT || '22' }}
+      SSH_USER: ${{ secrets.SSH_USER }}
+      FRONTEND_DIR: /opt/cpa-external/frontend
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: ruoyi-ui/package-lock.json
+
+      - name: 安装依赖并构建前端
+        working-directory: ruoyi-ui
+        run: |
+          npm ci
+          npm run build:prod
+
+      - name: 同步前端产物到服务器
+        run: |
+          if [ -z "$SSH_HOST" ] || [ -z "$SSH_USER" ]; then
+            echo "::notice::未配置 SSH_HOST / SSH_USER / SSH_PRIVATE_KEY secrets，跳过前端同步"
+            exit 0
+          fi
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -p "$SSH_PORT" "$SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          echo "[信息] 备份服务器当前前端目录为 frontend.bak ..."
+          ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" "rm -rf $FRONTEND_DIR.bak && cp -r $FRONTEND_DIR $FRONTEND_DIR.bak 2>/dev/null || true"
+          echo "[信息] rsync 同步 dist 到 $SSH_USER@$SSH_HOST:$FRONTEND_DIR/ ..."
+          rsync -az --delete -e "ssh -p $SSH_PORT" ruoyi-ui/dist/ "$SSH_USER@$SSH_HOST:$FRONTEND_DIR/"
+          echo "[信息] 前端同步完成"
