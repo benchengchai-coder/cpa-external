@@ -19,5 +19,5 @@ selenium-debug.log
 *.sln
 *.local
 
-package-lock.json
+# package-lock.json 需入库：CI 用 npm ci 复现安装（旧约定曾忽略它，已更正）
 yarn.lock
