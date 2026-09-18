@@ -10,7 +10,7 @@
 ```
 客户端 → CLIProxyAPI
            ↓ 请求前（intercept_before，可选预检）
-         POST /aigate/billing/check   ← 只读校验 Key/用户有效性，不产生任何计费副作用
+         POST /aigate/billing/check   ← 只读校验 Key/用户有效性 + 余额预检，不产生任何计费副作用
            ↓ allowed=false → CLIProxyAPI 直接拒绝（建议 402/403）
            ↓ allowed=true  → CLIProxyAPI 处理 AI 请求
            ↓ 请求完成
@@ -64,8 +64,19 @@ amount_total,amount_used,frozen_balance,available_amount}`（amount_total=0 表�
 Key 级配额已下线，`key` 子对象为兼容旧插件保留结构，恒返回
 `unlimited_balance=true, remain_balance=0, frozen_balance=0, available_balance=null`。
 
-`allowed=false` 仅出现在 Key 无效/停用或关联用户不存在/停用（`reason` 给出原因），
-余额与并发均不在请求阶段判定。
+`allowed=false` 出现两类场景（`reason` 给出原因）：
+
+1. Key 无效/停用，或关联用户不存在/停用 → 建议映射 403；
+2. **余额预检**（`cpa.billing.balance-check-enabled`，默认开启）：按用户计费偏好判定
+   是否还有可用资金源，资金口径与结算分配一致——
+   - `wallet_only`：钱包可用（余额 − 冻结）> 0；
+   - `subscription_only`：存在生效订阅且可用额度 > 0（不限量订阅视为可用）；
+   - `wallet_first` / `subscription_first`：钱包或订阅任一可用；
+   - 拒绝原因带"余额/额度"特征词（如"钱包余额不足且无可用订阅额度"），
+     CLIProxyAPI 插件据此映射 402。
+   并发不在请求阶段判定。预检是后付费模型的请求级兜底：余额尚有结余（哪怕一分钱）
+   的用户在结算延迟窗口内仍可继续消费，欠收差额由结算记为 `partial` 的
+   `uncovered_amount`，不会把余额打成负数。
 
 ## 鉴权失败
 
@@ -78,7 +89,7 @@ Key 级配额已下线，`key` 子对象为兼容旧插件保留结构，恒返�
    RESP usage 通道的 AUTH 密码）。
 2. 插件（billing-guard 2.0.0+）在 `request.intercept_before` 中调用 check 做只读预检：
    - 取入站 api_key 调用 `/check`，`allowed=false` 时 `Terminate: true` 并返回 403
-     （Key 无效/停用）；
+     （Key 无效/停用）或 402（余额预检不通过）；
    - HTTP 超时建议 2~3 秒：check 接口不可用时是否放行由部署者自行决断
      （默认拒绝可避免绕过管理端停用 Key，放行则退化为纯后付费模式）。
 3. 无需任何释放或费用上报调用：结算数据完全来自 Redis usage，失败请求零费结算、
@@ -89,6 +100,7 @@ Key 级配额已下线，`key` 子对象为兼容旧插件保留结构，恒返�
 | 配置 | 默认 | 说明 |
 |------|------|------|
 | `cpa.billing.api-token` | 空 | 公开计费 API 的鉴权 Token（X-Billing-Token 头）；为空则拒绝所有请求 |
+| `cpa.billing.balance-check-enabled` | true | `/check` 余额预检开关：按计费偏好无任何可用资金源时 `allowed=false`；关闭则退回纯后付费 |
 | `cpa.billing.settle-delay-seconds` | 5 | 延迟结算窗口，需大于凭据重试的最大间隔 |
 | `cpa.billing.settlement-worker-enabled` | true | 异步结算 Worker 开关 |
 | `cpa.billing.settlement-max-retries` | 10 | 自动重试上限，超限进入"结算异常"人工处置 |

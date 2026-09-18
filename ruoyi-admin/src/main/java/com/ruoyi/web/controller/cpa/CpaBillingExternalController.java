@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.ruoyi.cpaexternal.apikey.domain.CpaApiKey;
 import com.ruoyi.cpaexternal.apikey.service.ICpaApiKeyService;
 import com.ruoyi.cpaexternal.billing.config.CpaBillingProperties;
+import com.ruoyi.cpaexternal.subscription.domain.AiSubscriptionConstants;
 import com.ruoyi.cpaexternal.subscription.domain.AiUserSubscription;
 import com.ruoyi.cpaexternal.subscription.mapper.AiUserSubscriptionMapper;
 import com.ruoyi.common.core.domain.entity.SysUser;
@@ -25,7 +26,7 @@ import com.ruoyi.system.mapper.SysUserMapper;
 /**
  * CLIProxyAPI 公开计费 API。
  *
- * <p>供 CLIProxyAPI 诊断余额/订阅状态；实际计费在 usage 落库后完成。
+ * <p>供 CLIProxyAPI 诊断余额/订阅状态并做请求前余额预检；实际计费在 usage 落库后完成。
  * 路径在 SecurityConfig 中放行，请求方必须携带配置的 X-Billing-Token；
  * 对接契约见 docs/cliproxy-billing-integration.md。</p>
  */
@@ -52,7 +53,7 @@ public class CpaBillingExternalController
     @Autowired
     private CpaBillingProperties billingProperties;
 
-    /** 余额/订阅/Key 配额只读校验，供 CLIProxyAPI 或诊断工具预检。 */
+    /** 余额/订阅只读校验 + 余额预检，供 CLIProxyAPI 或诊断工具预检。 */
     @PostMapping("/check")
     public ResponseEntity<Map<String, Object>> check(@RequestBody Map<String, Object> request,
             @RequestHeader(value = TOKEN_HEADER, required = false) String token)
@@ -85,6 +86,19 @@ public class CpaBillingExternalController
             body.put("reason", "API Key关联用户不存在或已停用");
             return ResponseEntity.ok(body);
         }
+        AiUserSubscription subscription = userSubscriptionMapper
+                .selectActiveSubscriptionSnapshotForBilling(user.getUserId());
+
+        BigDecimal balance = nvl(user.getBalance());
+        BigDecimal walletFrozen = nvl(user.getFrozenBalance());
+        BigDecimal walletAvailable = positive(balance.subtract(walletFrozen));
+        if (billingProperties.isBalanceCheckEnabled()
+                && !hasUsableFunds(user.getBillingPreference(), walletAvailable, subscription))
+        {
+            body.put("allowed", false);
+            body.put("reason", insufficientFundsReason(user.getBillingPreference()));
+            return ResponseEntity.ok(body);
+        }
 
         body.put("allowed", true);
         body.put("user_id", user.getUserId());
@@ -92,15 +106,11 @@ public class CpaBillingExternalController
         body.put("billing_preference", user.getBillingPreference());
 
         Map<String, Object> wallet = new LinkedHashMap<>();
-        BigDecimal balance = nvl(user.getBalance());
-        BigDecimal walletFrozen = nvl(user.getFrozenBalance());
         wallet.put("balance", balance);
         wallet.put("frozen_balance", walletFrozen);
-        wallet.put("available_balance", positive(balance.subtract(walletFrozen)));
+        wallet.put("available_balance", walletAvailable);
         body.put("wallet", wallet);
 
-        AiUserSubscription subscription = userSubscriptionMapper
-                .selectActiveSubscriptionSnapshotForBilling(user.getUserId());
         Map<String, Object> subscriptionInfo = new LinkedHashMap<>();
         if (subscription != null)
         {
@@ -144,6 +154,41 @@ public class CpaBillingExternalController
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
         return null;
+    }
+
+    /**
+     * 余额预检：按用户计费偏好判断是否还有可用资金源，资金口径与结算分配一致
+     * （钱包可用 = 余额 - 冻结；不限量订阅 amount_total=0，getAvailableAmount()=null，视为可用）。
+     * 后付费模型下这是请求级兜底，不保证覆盖结算延迟窗口内的消耗。
+     */
+    private boolean hasUsableFunds(String preference, BigDecimal walletAvailable, AiUserSubscription subscription)
+    {
+        boolean subscriptionUsable = subscription != null
+                && (subscription.getAvailableAmount() == null
+                        || subscription.getAvailableAmount().compareTo(BigDecimal.ZERO) > 0);
+        if (AiSubscriptionConstants.PREFERENCE_WALLET_ONLY.equals(preference))
+        {
+            return walletAvailable.compareTo(BigDecimal.ZERO) > 0;
+        }
+        if (AiSubscriptionConstants.PREFERENCE_SUBSCRIPTION_ONLY.equals(preference))
+        {
+            return subscriptionUsable;
+        }
+        return walletAvailable.compareTo(BigDecimal.ZERO) > 0 || subscriptionUsable;
+    }
+
+    /** 拒绝原因带"余额/额度"特征词，CLIProxyAPI 计费插件据此映射为 402。 */
+    private String insufficientFundsReason(String preference)
+    {
+        if (AiSubscriptionConstants.PREFERENCE_WALLET_ONLY.equals(preference))
+        {
+            return "钱包余额不足，请充值后再试";
+        }
+        if (AiSubscriptionConstants.PREFERENCE_SUBSCRIPTION_ONLY.equals(preference))
+        {
+            return "订阅可用额度不足或已过期";
+        }
+        return "钱包余额不足且无可用订阅额度";
     }
 
     private BigDecimal nvl(BigDecimal value)

@@ -14,6 +14,9 @@ public class CpaBillingProperties
     /** 公开计费 API 的 Bearer Token，为空时公开接口拒绝所有请求。 */
     private String apiToken = "";
 
+    /** /check 是否做余额预检：按计费偏好无任何可用资金源时拒绝（后付费模型的请求级兜底）。 */
+    private boolean balanceCheckEnabled = true;
+
     /** 是否启动异步结算 Worker。 */
     private boolean settlementWorkerEnabled = true;
 
@@ -77,6 +80,16 @@ public class CpaBillingProperties
     public void setApiToken(String apiToken)
     {
         this.apiToken = apiToken;
+    }
+
+    public boolean isBalanceCheckEnabled()
+    {
+        return balanceCheckEnabled;
+    }
+
+    public void setBalanceCheckEnabled(boolean balanceCheckEnabled)
+    {
+        this.balanceCheckEnabled = balanceCheckEnabled;
     }
 
     public boolean isSettlementWorkerEnabled()

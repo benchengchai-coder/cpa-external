@@ -72,6 +72,8 @@ cpa:
   billing:
     # 公开计费 API 的鉴权 Token（请求头 X-Billing-Token）；为空时 /aigate/billing/check 拒绝所有请求
     api-token: ${CPA_BILLING_API_TOKEN:Cbc940209,.}
+    # /check 余额预检：按计费偏好钱包与订阅均无可用额度时 allowed=false（CLIProxyAPI 插件映射 402）
+    balance-check-enabled: ${CPA_BILLING_BALANCE_CHECK_ENABLED:true}
     # usage 落库后到结算任务可领取的延迟窗口（秒），聚合凭据重试产生的多条 usage
     settle-delay-seconds: ${CPA_BILLING_SETTLE_DELAY_SECONDS:5}
     # 异步结算 Worker
