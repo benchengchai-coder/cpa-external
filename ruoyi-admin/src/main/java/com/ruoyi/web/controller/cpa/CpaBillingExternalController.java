@@ -16,21 +16,16 @@ import org.springframework.web.bind.annotation.RestController;
 import com.ruoyi.cpaexternal.apikey.domain.CpaApiKey;
 import com.ruoyi.cpaexternal.apikey.service.ICpaApiKeyService;
 import com.ruoyi.cpaexternal.billing.config.CpaBillingProperties;
-import com.ruoyi.cpaexternal.billing.domain.CpaBillingReleaseRequest;
-import com.ruoyi.cpaexternal.billing.domain.CpaBillingReserveRequest;
-import com.ruoyi.cpaexternal.billing.domain.CpaBillingReserveResult;
-import com.ruoyi.cpaexternal.billing.service.ICpaBillingService;
 import com.ruoyi.cpaexternal.subscription.domain.AiUserSubscription;
 import com.ruoyi.cpaexternal.subscription.mapper.AiUserSubscriptionMapper;
 import com.ruoyi.common.core.domain.entity.SysUser;
-import com.ruoyi.common.exception.ServiceException;
 import com.ruoyi.common.utils.StringUtils;
 import com.ruoyi.system.mapper.SysUserMapper;
 
 /**
  * CLIProxyAPI 公开计费 API。
  *
- * <p>供 CLIProxyAPI 在处理 AI 请求前调用：余额/订阅校验、额度预占与主动释放。
+ * <p>供 CLIProxyAPI 诊断余额/订阅状态；实际计费在 usage 落库后完成。
  * 路径在 SecurityConfig 中放行，请求方必须携带配置的 X-Billing-Token；
  * 对接契约见 docs/cliproxy-billing-integration.md。</p>
  */
@@ -46,9 +41,6 @@ public class CpaBillingExternalController
     private static final String USER_STATUS_NORMAL = "0";
 
     @Autowired
-    private ICpaBillingService billingService;
-
-    @Autowired
     private ICpaApiKeyService apiKeyService;
 
     @Autowired
@@ -60,51 +52,9 @@ public class CpaBillingExternalController
     @Autowired
     private CpaBillingProperties billingProperties;
 
-    /**
-     * 请求前额度预占；预占失败时 allowed=false 并给出原因，
-     * CLIProxyAPI 应据此拒绝请求（建议映射为 402/429）。
-     */
-    @PostMapping("/reserve")
-    public ResponseEntity<CpaBillingReserveResult> reserve(@RequestBody CpaBillingReserveRequest request,
-            @RequestHeader(value = TOKEN_HEADER, required = false) String token)
-    {
-        ResponseEntity<Void> denied = authorize(token);
-        if (denied != null)
-        {
-            return ResponseEntity.status(denied.getStatusCode()).build();
-        }
-        String requestId = request == null ? null : request.getRequestId();
-        try
-        {
-            return ResponseEntity.ok(billingService.reserve(request));
-        }
-        catch (ServiceException e)
-        {
-            return ResponseEntity.ok(rejected(requestId, e.getMessage()));
-        }
-    }
-
-    /** 主动释放预占：请求被拒绝或未产生任何用量时由 CLIProxyAPI 调用，幂等。 */
-    @PostMapping("/release")
-    public ResponseEntity<Map<String, Object>> release(@RequestBody CpaBillingReleaseRequest request,
-            @RequestHeader(value = TOKEN_HEADER, required = false) String token)
-    {
-        ResponseEntity<Void> denied = authorize(token);
-        if (denied != null)
-        {
-            return ResponseEntity.status(denied.getStatusCode()).build();
-        }
-        String requestId = request == null ? null : request.getRequestId();
-        billingService.release(requestId, request == null ? null : request.getReason());
-        Map<String, Object> body = new LinkedHashMap<>();
-        body.put("request_id", requestId);
-        body.put("released", true);
-        return ResponseEntity.ok(body);
-    }
-
-    /** 余额/订阅/Key 配额只读校验，不产生冻结，供 CLIProxyAPI 或诊断工具预检。 */
+    /** 余额/订阅/Key 配额只读校验，供 CLIProxyAPI 或诊断工具预检。 */
     @PostMapping("/check")
-    public ResponseEntity<Map<String, Object>> check(@RequestBody CpaBillingReserveRequest request,
+    public ResponseEntity<Map<String, Object>> check(@RequestBody Map<String, Object> request,
             @RequestHeader(value = TOKEN_HEADER, required = false) String token)
     {
         ResponseEntity<Void> denied = authorize(token);
@@ -112,7 +62,7 @@ public class CpaBillingExternalController
         {
             return ResponseEntity.status(denied.getStatusCode()).build();
         }
-        String apiKey = request == null ? null : request.getApiKey();
+        String apiKey = request == null ? null : (String) request.get("api_key");
         Map<String, Object> body = new LinkedHashMap<>();
         if (StringUtils.isEmpty(apiKey))
         {
@@ -163,7 +113,7 @@ public class CpaBillingExternalController
         }
         body.put("subscription", subscriptionInfo);
 
-        // AI并发占用只读信息：权威判定在 reserve 预占事务内，此处仅作预检诊断
+        // AI并发信息仅作诊断参考，不参与计费判定
         Map<String, Object> concurrency = new LinkedHashMap<>();
         concurrency.put("limit", user.getAiConcurrencyLimit());
         concurrency.put("active", user.getActiveRequestCount() == null ? 0 : user.getActiveRequestCount());
@@ -194,15 +144,6 @@ public class CpaBillingExternalController
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
         return null;
-    }
-
-    private CpaBillingReserveResult rejected(String requestId, String reason)
-    {
-        CpaBillingReserveResult result = new CpaBillingReserveResult();
-        result.setAllowed(false);
-        result.setRequestId(requestId);
-        result.setReason(reason);
-        return result;
     }
 
     private BigDecimal nvl(BigDecimal value)

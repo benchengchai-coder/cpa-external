@@ -173,6 +173,20 @@ class CpaAiLogServiceImplTest
         verify(aiLogMapper, never()).insert(any(CpaAiLog.class));
     }
 
+    /** 失败 usage 即使携带 token 也必须按零费用落库，不能进入计费链路。 */
+    @Test
+    void ingestShouldForceFailedUsageCostToZero()
+    {
+        when(aiLogMapper.selectByRequestId("req-1")).thenReturn(null);
+        CpaAiLogPayload failedPayload = payload();
+        failedPayload.setFailed(true);
+
+        CpaAiLog inserted = captureIngest(failedPayload);
+
+        assertEquals(BigDecimal.ZERO, inserted.getCost());
+        verify(costCalculator, never()).calculate(any(CpaAiLogPayload.class), any());
+    }
+
     /** 已是成功记录时后续重复 usage 不覆盖。 */
     @Test
     void ingestShouldNotReplaceSuccessfulRecord()

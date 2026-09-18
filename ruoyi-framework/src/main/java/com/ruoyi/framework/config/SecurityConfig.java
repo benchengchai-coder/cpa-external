@@ -109,7 +109,7 @@ public class SecurityConfig
                     // 支付宝异步通知回调，由支付宝服务器发起，无登录态，需单独放行（内部靠验签保证安全）
                     .requestMatchers("/aigate/pay/alipay/notify").permitAll()
                     // CLIProxyAPI 公开计费 API，由 CLIProxyAPI 插件发起，无登录态（内部靠 Bearer Token 鉴权）
-                    .requestMatchers("/aigate/billing/reserve", "/aigate/billing/release", "/aigate/billing/check").permitAll()
+                    .requestMatchers("/aigate/billing/check").permitAll()
                     // 静态资源，可匿名访问
                     .requestMatchers(HttpMethod.GET, "/", "/*.html", "/**.html", "/**.css", "/**.js", "/profile/**").permitAll()
                     .requestMatchers("/swagger-ui.html", "/v3/api-docs/**", "/swagger-ui/**", "/druid/**").permitAll()

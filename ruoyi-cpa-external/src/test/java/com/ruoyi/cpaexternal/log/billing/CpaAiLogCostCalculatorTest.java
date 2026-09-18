@@ -140,6 +140,17 @@ class CpaAiLogCostCalculatorTest
         assertEquals(new BigDecimal("0.0000000000"), cost);
     }
 
+    @Test
+    void shouldReturnZeroForFailedRequestEvenWhenTokensArePresent()
+    {
+        CpaAiLogPayload payload = payload(1000, 100, 0, 0, 0);
+        payload.setFailed(true);
+
+        BigDecimal cost = calculator.calculate(payload, BigDecimal.ONE);
+
+        assertEquals(BigDecimal.ZERO, cost);
+    }
+
     private CpaModel model(String inputPrice, String outputPrice, String cacheReadPrice, String cacheWritePrice)
     {
         CpaModel model = new CpaModel();

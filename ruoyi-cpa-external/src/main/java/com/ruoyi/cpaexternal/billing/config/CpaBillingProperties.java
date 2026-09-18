@@ -8,22 +8,13 @@ import org.springframework.stereotype.Component;
 @ConfigurationProperties(prefix = "cpa.billing")
 public class CpaBillingProperties
 {
-    /** 预占超时时间（秒），超时未结算的预占由定时任务释放。 */
-    private long reservationTimeoutSeconds = 7200L;
-
     /** usage 落库后到结算任务可领取的延迟窗口（秒），用于聚合凭据重试产生的多条 usage。 */
-    private int settleDelaySeconds = 10;
+    private int settleDelaySeconds = 5;
 
     /** 公开计费 API 的 Bearer Token，为空时公开接口拒绝所有请求。 */
     private String apiToken = "";
 
-    /** 过期预占清理间隔（毫秒）。 */
-    private long cleanupIntervalMs = 60000L;
-
-    /** 单次清理数量。 */
-    private int cleanupBatchSize = 100;
-
-    /** 是否启动异步结算 Worker；预占-结算的唯一路径是异步结算，正常部署必须开启。 */
+    /** 是否启动异步结算 Worker。 */
     private boolean settlementWorkerEnabled = true;
 
     /** Worker 轮询间隔（毫秒）。 */
@@ -68,16 +59,6 @@ public class CpaBillingProperties
     /** 数据库死锁即时重试最大延迟（毫秒）。 */
     private long transactionDeadlockMaxDelayMs = 200L;
 
-    public long getReservationTimeoutSeconds()
-    {
-        return reservationTimeoutSeconds;
-    }
-
-    public void setReservationTimeoutSeconds(long reservationTimeoutSeconds)
-    {
-        this.reservationTimeoutSeconds = reservationTimeoutSeconds;
-    }
-
     public int getSettleDelaySeconds()
     {
         return settleDelaySeconds;
@@ -96,26 +77,6 @@ public class CpaBillingProperties
     public void setApiToken(String apiToken)
     {
         this.apiToken = apiToken;
-    }
-
-    public long getCleanupIntervalMs()
-    {
-        return cleanupIntervalMs;
-    }
-
-    public void setCleanupIntervalMs(long cleanupIntervalMs)
-    {
-        this.cleanupIntervalMs = cleanupIntervalMs;
-    }
-
-    public int getCleanupBatchSize()
-    {
-        return cleanupBatchSize;
-    }
-
-    public void setCleanupBatchSize(int cleanupBatchSize)
-    {
-        this.cleanupBatchSize = cleanupBatchSize;
     }
 
     public boolean isSettlementWorkerEnabled()

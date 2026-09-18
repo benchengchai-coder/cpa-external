@@ -109,8 +109,53 @@ public class CpaBillingSettlementServiceImpl implements ICpaBillingSettlementSer
         CpaBillingRecord billingRecord = billingRecordMapper.selectByRequestIdForUpdate(requestId);
         if (billingRecord == null)
         {
-            // 无预占账单：未接入预占的请求只记日志，不参与计费
-            return;
+            CpaAiLog aiLog = aiLogMapper.selectByRequestId(requestId);
+            if (aiLog == null || aiLog.getUserId() == null)
+            {
+                log.warn("CLIProxyAPI usage 缺少可计费用户，跳过结算: requestId={}", requestId);
+                return;
+            }
+            SysUser user = sysUserMapper.selectUserById(aiLog.getUserId());
+            if (user == null)
+            {
+                log.warn("CLIProxyAPI usage 关联用户不存在，跳过结算: requestId={}, userId={}",
+                        requestId, aiLog.getUserId());
+                return;
+            }
+            billingRecord = new CpaBillingRecord();
+            billingRecord.setRequestId(requestId);
+            billingRecord.setUserId(aiLog.getUserId());
+            billingRecord.setKeyId(aiLog.getKeyId());
+            billingRecord.setAmount(nvl(aiLog.getCost()));
+            billingRecord.setReservedAmount(ZERO);
+            billingRecord.setWalletReservedAmount(ZERO);
+            billingRecord.setSubscriptionReservedAmount(ZERO);
+            billingRecord.setKeyReservedAmount(ZERO);
+            billingRecord.setWalletChargedAmount(ZERO);
+            billingRecord.setSubscriptionChargedAmount(ZERO);
+            billingRecord.setKeyChargedAmount(ZERO);
+            billingRecord.setUncoveredAmount(ZERO);
+            String preference = user.getBillingPreference();
+            billingRecord.setBillingPreference(preference);
+            if (!AiSubscriptionConstants.PREFERENCE_WALLET_ONLY.equals(preference))
+            {
+                AiUserSubscription subscription = userSubscriptionMapper
+                        .selectActiveSubscriptionSnapshotForBilling(aiLog.getUserId());
+                if (subscription != null)
+                {
+                    billingRecord.setSubscriptionId(subscription.getSubscriptionId());
+                    billingRecord.setSubscriptionPlanTitle(subscription.getPlanTitle());
+                }
+            }
+            billingRecord.setStatus(CpaBillingConstants.STATUS_PENDING_SETTLEMENT);
+            if (billingRecordMapper.insertIgnore(billingRecord) != 1)
+            {
+                billingRecord = billingRecordMapper.selectByRequestIdForUpdate(requestId);
+            }
+            if (billingRecord == null)
+            {
+                throw new ServiceException("写入CLIProxyAPI用量账单失败");
+            }
         }
         if (isTerminal(billingRecord.getStatus()))
         {
@@ -140,11 +185,6 @@ public class CpaBillingSettlementServiceImpl implements ICpaBillingSettlementSer
         repaired += repairBillingIds(billingRecordMapper.selectPendingWithoutTask(actualLimit),
             "补建CLIProxyAPI结算任务(pending_settlement)");
 
-        // 延迟窗口的两倍时间之后仍无任务的 reserved 账单：提交崩溃或消息丢失，立即补建
-        long guardSeconds = Math.max(60L, billingProperties.getSettleDelaySeconds() * 2L);
-        Date beforeTime = new Date(System.currentTimeMillis() - guardSeconds * 1000L);
-        repaired += repairBillingIds(billingRecordMapper.selectReservedWithLogWithoutTask(actualLimit, beforeTime),
-            "补建CLIProxyAPI结算任务(reserved)");
         return repaired;
     }
 
@@ -237,17 +277,22 @@ public class CpaBillingSettlementServiceImpl implements ICpaBillingSettlementSer
             markTaskDone(task, claimToken);
             return;
         }
-        if (CpaBillingConstants.STATUS_RESERVED.equals(billingRecord.getStatus()))
+        if (CpaBillingConstants.STATUS_RESERVED.equals(billingRecord.getStatus())
+                || CpaBillingConstants.STATUS_PENDING_SETTLEMENT.equals(billingRecord.getStatus())
+                || CpaBillingConstants.STATUS_PROCESSING.equals(billingRecord.getStatus()))
         {
             BigDecimal finalAmount = resolveFinalAmount(billingRecord.getRequestId());
             billingRecord.setAmount(finalAmount);
-            if (billingRecordMapper.updatePendingSettlement(billingRecord) != 1)
+            if (CpaBillingConstants.STATUS_PROCESSING.equals(billingRecord.getStatus())
+                    && billingRecordMapper.updatePendingSettlement(billingRecord) != 1)
             {
                 throw new ServiceException("持久化CLIProxyAPI结算意图失败");
             }
+            if (CpaBillingConstants.STATUS_PENDING_SETTLEMENT.equals(billingRecord.getStatus()))
+            {
+                billingRecordMapper.updatePendingAmount(billingRecord);
+            }
             billingRecord.setStatus(CpaBillingConstants.STATUS_PENDING_SETTLEMENT);
-            // reserved→pending_settlement 出口：释放并发占位（与状态迁移同事务，CAS保证恰好一次）
-            sysUserMapper.decrementUserActiveRequestCount(billingRecord.getUserId());
         }
         if (!CpaBillingConstants.STATUS_PENDING_SETTLEMENT.equals(billingRecord.getStatus()))
         {
@@ -302,7 +347,7 @@ public class CpaBillingSettlementServiceImpl implements ICpaBillingSettlementSer
 
     /**
      * 领取任务时读取最终结算金额：ai_log.cost 为权威值（延迟窗口内后续 usage
-     * 可能已更新），并应用最低计费；结算日志缺失时按零费结算（对齐旧系统语义）。
+     * 可能已更新），并应用最低计费；结算日志缺失或明确失败时按零费结算。
      */
     private BigDecimal resolveFinalAmount(String requestId)
     {
@@ -310,6 +355,11 @@ public class CpaBillingSettlementServiceImpl implements ICpaBillingSettlementSer
         if (settlementLog == null)
         {
             log.warn("CLIProxyAPI结算日志缺失，按零费结算: requestId={}", requestId);
+            return ZERO;
+        }
+        if (Boolean.TRUE.equals(settlementLog.getFailed()))
+        {
+            // 对历史脏数据和失败日志做结算边界兜底：failed 永远不能形成实扣。
             return ZERO;
         }
         return minimumChargeResolver.applyMinimumAmount(settlementLog.getCost());

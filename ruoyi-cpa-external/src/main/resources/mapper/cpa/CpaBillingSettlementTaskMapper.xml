@@ -189,6 +189,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         left join sys_user u on u.user_id = t.user_id
         left join ai_apikey k on k.key_id = t.key_id
         where t.status = 'failed'
+          and b.status in ('reserved', 'pending_settlement')
         <if test="requestId != null and requestId != ''">
             and t.request_id like concat('%', #{requestId}, '%')
         </if>

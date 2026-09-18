@@ -179,6 +179,7 @@
 <script setup lang="ts" name="UpstreamFailure">
 import { listUpstreamFailure, getUpstreamFailure, delUpstreamFailure } from '@/api/aigate/upstreamFailure'
 import { usePersistentAutoRefresh } from '@/composables/usePersistentAutoRefresh'
+import { parseTime } from '@/utils/ruoyi'
 import type { UpstreamFailureQueryParams, UpstreamFailureRecord, UpstreamFailureAuthStatusSnapshot } from '@/types'
 import { formatRequestTime, useAiDrawerSize } from '../common'
 
@@ -197,7 +198,8 @@ const detailOpen = ref(false)
 const loading = ref(true)
 const showSearch = ref(true)
 const total = ref(0)
-const dateRange = ref<string[]>([])
+// 进入页面默认查询今天
+const dateRange = ref<string[]>(defaultTodayRange())
 
 const data = reactive({
   queryParams: {
@@ -214,6 +216,12 @@ const data = reactive({
 })
 
 const { queryParams } = toRefs(data)
+
+/** 默认时间范围：今天到今天（YYYY-MM-DD）。 */
+function defaultTodayRange(): string[] {
+  const today = parseTime(new Date(), '{y}-{m}-{d}')
+  return today ? [today, today] : []
+}
 
 function formatEventTime(value: string | undefined) {
   return value ? formatRequestTime(value) : '-'
@@ -264,7 +272,7 @@ function handleQuery() {
 }
 
 function resetQuery() {
-  dateRange.value = []
+  dateRange.value = defaultTodayRange()
   proxy.resetForm('queryRef')
   handleQuery()
 }

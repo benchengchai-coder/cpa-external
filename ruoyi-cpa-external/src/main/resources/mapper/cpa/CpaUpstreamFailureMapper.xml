@@ -47,7 +47,8 @@
             <if test="authUnavailable != null">and auth_unavailable = #{authUnavailable}</if>
             <if test="quotaExceeded != null">and quota_exceeded = #{quotaExceeded}</if>
             <if test="params.beginTime != null and params.beginTime != ''">and event_time &gt;= #{params.beginTime}</if>
-            <if test="params.endTime != null and params.endTime != ''">and event_time &lt;= #{params.endTime}</if>
+            <!-- endTime 为日期字符串（YYYY-MM-DD），需加一天取开区间，否则会漏掉结束日当天的数据 -->
+            <if test="params.endTime != null and params.endTime != ''">and event_time &lt; date_add(#{params.endTime}, interval 1 day)</if>
         </where>
         order by event_time desc, failure_id desc
     </select>

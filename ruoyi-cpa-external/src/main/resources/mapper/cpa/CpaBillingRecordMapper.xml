@@ -60,20 +60,6 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         for update
     </select>
 
-    <select id="selectExpiredReservedIds" resultType="java.lang.Long">
-        select b.billing_id
-        from ai_billing_record b
-        where b.status = 'reserved'
-          and b.reserve_expire_time &lt;= sysdate()
-          and not exists (
-              select 1
-              from ai_billing_settlement_task t
-              where t.billing_id = b.billing_id
-          )
-        order by b.reserve_expire_time asc, b.billing_id asc
-        limit #{limit}
-    </select>
-
     <select id="selectPendingWithoutTask" resultType="java.lang.Long">
         select b.billing_id
         from ai_billing_record b
@@ -87,52 +73,16 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         limit #{limit}
     </select>
 
-    <select id="selectReservedWithLogWithoutTask" resultType="java.lang.Long">
-        select b.billing_id
-        from ai_billing_record b
-        where b.status = 'reserved'
-          and b.create_time &lt; #{beforeTime}
-          and not exists (
-              select 1
-              from ai_billing_settlement_task t
-              where t.billing_id = b.billing_id
-          )
-          and exists (
-              select 1
-              from ai_log l
-              where l.request_id = b.request_id
-          )
-        order by b.billing_id asc
-        limit #{limit}
-    </select>
-
     <insert id="insertIgnore" parameterType="CpaBillingRecord" useGeneratedKeys="true" keyProperty="billingId">
         insert ignore into ai_billing_record
-        (request_id, user_id, key_id, amount, reserved_amount, wallet_reserved_amount,
+        (request_id, user_id, key_id, subscription_id, subscription_plan_title, billing_preference, amount, reserved_amount, wallet_reserved_amount,
          subscription_reserved_amount, key_reserved_amount, wallet_charged_amount,
          subscription_charged_amount, key_charged_amount, uncovered_amount, status, create_time)
         values
-        (#{requestId}, #{userId}, #{keyId}, #{amount}, #{reservedAmount}, #{walletReservedAmount},
+        (#{requestId}, #{userId}, #{keyId}, #{subscriptionId}, #{subscriptionPlanTitle}, #{billingPreference}, #{amount}, #{reservedAmount}, #{walletReservedAmount},
          #{subscriptionReservedAmount}, #{keyReservedAmount}, #{walletChargedAmount},
          #{subscriptionChargedAmount}, #{keyChargedAmount}, #{uncoveredAmount}, #{status}, sysdate())
     </insert>
-
-    <update id="updateReserved" parameterType="CpaBillingRecord">
-        update ai_billing_record
-        set subscription_id = #{subscriptionId},
-            subscription_plan_title = #{subscriptionPlanTitle},
-            billing_preference = #{billingPreference},
-            reserved_amount = #{reservedAmount},
-            wallet_reserved_amount = #{walletReservedAmount},
-            subscription_reserved_amount = #{subscriptionReservedAmount},
-            key_reserved_amount = #{keyReservedAmount},
-            reserve_expire_time = #{reserveExpireTime},
-            status = 'reserved',
-            error_message = null,
-            update_time = sysdate()
-        where request_id = #{requestId}
-          and status = 'processing'
-    </update>
 
     <update id="updatePendingSettlement" parameterType="CpaBillingRecord">
         update ai_billing_record
@@ -141,7 +91,13 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             error_message = null,
             update_time = sysdate(3)
         where request_id = #{requestId}
-          and status = 'reserved'
+          and status in ('processing', 'pending_settlement')
+    </update>
+
+    <update id="updatePendingAmount" parameterType="CpaBillingRecord">
+        update ai_billing_record
+        set amount = #{amount}, update_time = sysdate(3)
+        where billing_id = #{billingId} and status = 'pending_settlement'
     </update>
 
     <update id="updateSettlementFromPending" parameterType="CpaBillingRecord">
@@ -156,15 +112,6 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             update_time = sysdate(3)
         where billing_id = #{billingId}
           and status = 'pending_settlement'
-    </update>
-
-    <update id="updateTerminal">
-        update ai_billing_record
-        set status = #{status},
-            error_message = #{errorMessage},
-            update_time = sysdate()
-        where billing_id = #{billingId}
-          and status = 'reserved'
     </update>
 
     <update id="updateWrittenOff">
@@ -200,20 +147,4 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
           and status in ('success', 'partial')
     </select>
 
-    <!-- 并发计数对账：计数列与 reserved 在途账单数不一致的用户，供补偿任务告警；
-         子查询仅扫描在途账单（数量被并发上限封顶），走 idx_ai_billing_user_status_create 前缀 -->
-    <select id="selectConcurrencyDrift"
-            resultType="com.ruoyi.cpaexternal.billing.domain.vo.CpaBillingConcurrencyDriftVO">
-        select u.user_id as userId,
-               u.active_request_count as counterCount,
-               ifnull(r.recordCount, 0) as recordCount
-        from sys_user u
-        left join (
-            select user_id, count(*) as recordCount
-            from ai_billing_record
-            where status = 'reserved'
-            group by user_id
-        ) r on r.user_id = u.user_id
-        where u.active_request_count &lt;&gt; ifnull(r.recordCount, 0)
-    </select>
 </mapper>

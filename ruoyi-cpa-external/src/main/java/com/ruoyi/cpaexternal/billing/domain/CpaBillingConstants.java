@@ -25,7 +25,6 @@ public final class CpaBillingConstants
     public static final String TASK_FAILED = "failed";
     public static final String TASK_RESOLVED = "resolved";
 
-    public static final String CONFIG_RESERVE_AMOUNT = "ai.billing.reserveAmount";
 
     /** AI 请求最低计费金额配置键，在结算边界应用。 */
     public static final String CONFIG_MINIMUM_AMOUNT = "ai.billing.minimumAmount";

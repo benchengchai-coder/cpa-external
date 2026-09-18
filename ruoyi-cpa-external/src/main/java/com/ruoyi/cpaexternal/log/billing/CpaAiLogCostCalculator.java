@@ -42,6 +42,10 @@ public class CpaAiLogCostCalculator
         {
             return null;
         }
+        if (Boolean.TRUE.equals(payload.getFailed()))
+        {
+            return BigDecimal.ZERO;
+        }
         CpaModel model = modelMapper.selectPricingByName(payload.getModel());
         if (model == null)
         {

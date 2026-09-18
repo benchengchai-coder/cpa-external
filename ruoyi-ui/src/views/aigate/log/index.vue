@@ -260,6 +260,13 @@
         </div>
       </template>
       <div class="log-detail-dialog__body">
+        <section v-if="hasFailDetail(detail.fail)" class="detail-section detail-section--error">
+          <div class="detail-section__header">
+            <span class="detail-section__title">失败详情</span>
+          </div>
+          <pre class="detail-error-message">{{ failSummary(detail.fail) }}</pre>
+        </section>
+
         <section class="detail-section">
           <div class="detail-section__header">
             <span class="detail-section__title">调用概览</span>
@@ -402,13 +409,6 @@
             <span class="detail-section__title">错误信息</span>
           </div>
           <pre class="detail-error-message">{{ formatErrorMessage(detail.errorMessage) }}</pre>
-        </section>
-
-        <section v-if="hasFailDetail(detail.fail)" class="detail-section detail-section--error">
-          <div class="detail-section__header">
-            <span class="detail-section__title">失败详情</span>
-          </div>
-          <pre class="detail-error-message">{{ failSummary(detail.fail) }}</pre>
         </section>
 
         <section v-if="hasTokenBreakdown(detail.tokenBreakdown)" class="detail-section">

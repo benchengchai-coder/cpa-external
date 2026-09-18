@@ -1,5 +1,6 @@
 package com.ruoyi.cpaexternal.log.service.impl;
 
+import java.math.BigDecimal;
 import java.util.Collections;
 import java.util.Date;
 import java.util.List;
@@ -99,7 +100,7 @@ public class CpaAiLogServiceImpl implements ICpaAiLogService
         return aiLog;
     }
 
-    /** 由已落库的 usage 触发计费结算提交；无预占账单时由结算服务静默跳过。 */
+    /** 由已落库的 usage 触发计费结算提交。 */
     private void submitSettlementAfterCommit(CpaAiLog aiLog)
     {
         CpaBillingSettleCommand command = new CpaBillingSettleCommand();
@@ -197,8 +198,11 @@ public class CpaAiLogServiceImpl implements ICpaAiLogService
         {
             resolveApiKeyOwner(aiLog);
         }
-        // 官方定价 × 用户倍率，在入库时算好并快照，避免后续调价影响历史记录。
-        aiLog.setCost(costCalculator.calculate(payload, aiLog.getBillingMultiplier()));
+        // 明确失败的请求没有可计费的成功用量，强制零费用，避免失败日志携带的 token 被收费。
+        // 成功记录才按官方定价 × 用户倍率计算，并在入库时快照，避免后续调价影响历史记录。
+        aiLog.setCost(Boolean.TRUE.equals(aiLog.getFailed())
+                ? BigDecimal.ZERO
+                : costCalculator.calculate(payload, aiLog.getBillingMultiplier()));
         return aiLog;
     }
 

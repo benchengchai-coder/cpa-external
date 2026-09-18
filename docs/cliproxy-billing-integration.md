@@ -1,6 +1,6 @@
 # CLIProxyAPI 计费集成契约
 
-本项目作为独立账务服务，向 CLIProxyAPI 暴露"请求前预占、请求后结算"的计费能力。
+本项目作为独立账务服务，仅接收 CLIProxyAPI 已完成请求产生的 usage 并结算，不提供请求前预占或冻结接口。
 本项目不转发任何 AI 请求；请求入口由 CLIProxyAPI 自行承担，预占调用方是
 CLIProxyAPI 的插件（`request.intercept_before` 拦截器 + `host.http.do` 回调，
 参考官方示例 `examples/plugin/request-lifecycle`）。
@@ -10,7 +10,7 @@ CLIProxyAPI 的插件（`request.intercept_before` 拦截器 + `host.http.do` �
 ```
 客户端 → CLIProxyAPI
            ↓ 请求前（intercept_before）
-         POST /aigate/billing/reserve        ← 本项目：幂等建单 + 并发占位 + 三源冻结
+         （不再调用请求前预占接口）
            ↓ allowed=false → CLIProxyAPI 直接拒绝（建议 402/429）
            ↓ allowed=true  → CLIProxyAPI 处理 AI 请求
            ↓ 请求完成
@@ -18,7 +18,7 @@ CLIProxyAPI 的插件（`request.intercept_before` 拦截器 + `host.http.do` �
            ↓
          本项目 CpaUsageSubscriber → ai_log 落库（重试场景非失败记录覆盖失败记录）
            ↓ 事务提交后
-         延迟结算任务（默认 10s 窗口）
+         延迟结算任务（默认 5s 窗口）
            ↓ Worker 领取时重读 ai_log.cost
          三源结算（允许实扣超过预占）→ success / partial
 ```
@@ -29,12 +29,12 @@ CLIProxyAPI 的插件（`request.intercept_before` 拦截器 + `host.http.do` �
   预占、usage 记录、账单全部以该值关联。注意 usage 记录中的 `request_id` 与插件
   拦截阶段可见的 TraceID 一致；插件侧每次模型执行的 RequestID（UUID）不参与计费关联。
 - **多条 usage**：CLIProxyAPI 凭据重试时同一 request_id 会产生多条 usage，首条常是
-  失败尝试。本项目用"延迟结算窗口（`cpa.billing.settle-delay-seconds`，默认 10s）+
+  失败尝试。本项目用"延迟结算窗口（`cpa.billing.settle-delay-seconds`，默认 5s）+
   ai_log 择优覆盖（非失败记录覆盖失败记录）"保证按最终成功尝试计费；全失败的请求
   在窗口后按零费结算并释放预占。
 - **失败请求不收费**：失败尝试已产生的 token 不计入费用（对齐旧系统对失败请求的
   释放语义）。
-- **无预占的 usage**：只记日志不结算（灰度期或插件未覆盖时自然降级为纯记录）。
+- **usage 即结算依据**：无需预占调用；无法解析用户归属的 usage 只记日志并跳过扣费。
 
 ## 公开 HTTP API
 
@@ -44,7 +44,7 @@ CLIProxyAPI 的插件（`request.intercept_before` 拦截器 + `host.http.do` �
 使用独立的 `X-Billing-Token` 头而不是 `Authorization`，避免网关 JWT 过滤器
 把计费 Token 当登录 Token 解析而刷错误日志。
 
-### POST /aigate/billing/reserve
+### 请求前预占接口（已移除）
 
 请求前额度预占（幂等）：
 
@@ -88,7 +88,7 @@ CLIProxyAPI 应拒绝该请求，建议映射：余额/额度类 → 402，Key �
 幂等语义：同一 request_id 重复调用时，若账单处于 reserved / pending_settlement /
 success / partial 状态则回放既有预占结果（allowed=true）；终态释放后的重复调用会被拒绝。
 
-### POST /aigate/billing/release
+### 请求释放接口（已移除）
 
 请求被拒绝或未产生任何用量时主动释放预占（幂等，仅 reserved 状态生效；
 已产生 usage 的请求无需调用，结算会自动释放多余冻结）：
@@ -138,11 +138,9 @@ Key 级配额已下线，`key` 子对象为兼容旧插件保留结构，恒返�
 | 配置 | 默认 | 说明 |
 |------|------|------|
 | `cpa.billing.api-token` | 空 | 公开计费 API 的鉴权 Token（X-Billing-Token 头）；为空则拒绝所有请求 |
-| `cpa.billing.reservation-timeout-seconds` | 7200 | 预占超时释放（兜底，正常由结算释放） |
-| `cpa.billing.settle-delay-seconds` | 10 | 延迟结算窗口，需大于凭据重试的最大间隔 |
+| `cpa.billing.settle-delay-seconds` | 5 | 延迟结算窗口，需大于凭据重试的最大间隔 |
 | `cpa.billing.settlement-worker-enabled` | true | 异步结算 Worker 开关 |
 | `cpa.billing.settlement-max-retries` | 10 | 自动重试上限，超限进入"结算异常"人工处置 |
-| sys_config `ai.billing.reserveAmount` | 0.01 | 每请求固定预占金额 |
 | sys_config `ai.billing.minimumAmount` | 0.001 | 请求级最低计费（结算边界应用） |
 
 ## 用户并发限制
@@ -152,20 +150,19 @@ Key 级配额已下线，`key` 子对象为兼容旧插件保留结构，恒返�
   禁用该用户 AI 访问。计数列与账单状态机同事务原子维护，在途并发恒等于该用户
   `status='reserved'` 的账单数。
 - 槽位释放时机：请求完成后由结算 Worker 领取转 `pending_settlement` 时释放，即约
-  "完成时间 + settle-delay（默认 10s）+ Worker 轮询间隔"后可复用；方向保守，不会超发。
+  "完成时间 + settle-delay（默认 5s）+ Worker 轮询间隔"后可复用；方向保守，不会超发。
 - CPA 崩溃导致既无 usage 也无 release 的陈旧槽位，由预占超时释放兜底
-  （`reservation-timeout-seconds`，默认 7200 秒）。启用并发限制后如需更快自愈可调小
-  该值，但必须大于最长流式请求时长。
+  请求不再创建冻结槽位，因此无需预占超时清理。
 - 上限按用户配置：管理端"余额管理 → 并发限制"（`sys_user.ai_concurrency_limit`，0～1000）。
 - 每分钟补偿任务附带并发计数对账：计数列与 reserved 账单数不一致时输出 error 告警
   （仅告警不自动修复，用于发现状态出口遗漏递减的缺陷）。
 
 ## 运维
 
-- 结算失败任务：管理端"结算异常"页（`/aigate/billing/settlement/failed/list`），
-  支持"重新结算"（按账单金额正常扣款）与"人工核销"（释放全部冻结、放弃追收）。
-- 超时释放：`reserved` 状态超过 reservation-timeout-seconds 且无结算任务的账单，
-  由每分钟的补偿任务自动释放（状态置 `expired`）。
+- 结算失败任务：管理端“结算异常”页（前端路由 `/aigate/billing-settlement`，查询接口
+  `/aigate/billing/settlement/failed/list`），支持“重新结算”（按账单金额正常扣款）与
+  “人工核销”（释放全部冻结、放弃追收）。旧库若看不到菜单，先执行
+  `sql/migration/20260918_restore_billing_settlement_menu.sql`。
 - 对账兜底：`pending_settlement` 无任务（含旧系统遗留）与"延迟窗口后 reserved 且
   已有日志但无任务"的账单，由补偿任务自动补建结算任务。
 - 账单查询：日志详情页"账单"数据来自 `/aigate/billing/records/by-log/{logId}`。
@@ -174,9 +171,9 @@ Key 级配额已下线，`key` 子对象为兼容旧插件保留结构，恒返�
 
 ```
 processing → reserved → pending_settlement → success | partial
-                  ├→ released（主动释放）   └→ written_off（人工核销，自 pending/失败重试）
-                  ├→ expired（超时释放）
-                  └→ failed
+                   ├→ released（主动释放）   └→ written_off（人工核销，自 pending/失败重试）
+                   ├→ expired（超时释放，包含 pending_settlement 的失败/卡住任务）
+                   └→ failed
 ```
 
 所有状态迁移均通过 `where status = 旧值` 的 CAS 完成；账单以 request_id 全局唯一。

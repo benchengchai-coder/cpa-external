@@ -1,7 +1,7 @@
 <template>
   <div class="app-container billing-settlement-page">
     <el-alert
-      title="failed 任务不会自动退款或核销，必须由管理员重试结算，或明确放弃追收并释放冻结。"
+      title="结算失败会先进入人工处置；若超过 1 小时仍未完成，系统将自动释放冻结并标记为超时。"
       type="warning"
       :closable="false"
       show-icon

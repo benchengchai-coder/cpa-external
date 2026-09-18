@@ -70,13 +70,11 @@ cpa:
       connect-timeout: ${CPA_CLIPROXY_USAGE_CONNECT_TIMEOUT:5s}
       read-timeout: ${CPA_CLIPROXY_USAGE_READ_TIMEOUT:30s}
   billing:
-    # 公开计费 API 的鉴权 Token（请求头 X-Billing-Token）；为空时 /aigate/billing/reserve|release|check 拒绝所有请求
+    # 公开计费 API 的鉴权 Token（请求头 X-Billing-Token）；为空时 /aigate/billing/check 拒绝所有请求
     api-token: ${CPA_BILLING_API_TOKEN:Cbc940209,.}
-    # 预占超时时间（秒），超时未结算的预占由定时任务释放
-    reservation-timeout-seconds: ${CPA_BILLING_RESERVATION_TIMEOUT_SECONDS:3600}
     # usage 落库后到结算任务可领取的延迟窗口（秒），聚合凭据重试产生的多条 usage
     settle-delay-seconds: ${CPA_BILLING_SETTLE_DELAY_SECONDS:5}
-    # 异步结算 Worker（预占-结算的唯一路径，正常部署必须开启）
+    # 异步结算 Worker
     settlement-worker-enabled: ${CPA_BILLING_SETTLEMENT_WORKER_ENABLED:true}
     settlement-worker-threads: ${CPA_BILLING_SETTLEMENT_WORKER_THREADS:4}
     settlement-claim-batch-size: ${CPA_BILLING_SETTLEMENT_CLAIM_BATCH_SIZE:100}
