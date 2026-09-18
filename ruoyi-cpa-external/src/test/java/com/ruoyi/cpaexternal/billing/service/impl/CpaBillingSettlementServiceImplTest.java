@@ -25,7 +25,7 @@ import com.ruoyi.cpaexternal.subscription.mapper.AiUserSubscriptionMapper;
 import com.ruoyi.common.core.domain.entity.SysUser;
 import com.ruoyi.system.mapper.SysUserMapper;
 
-/** 结算链路并发计数递减测试：账单离开 reserved 状态的出口必须释放并发占位。 */
+/** 结算链路并发计数测试：预占移除后计数列不再递增，递减仅保留在人工核销处置出口清理遗留占位。 */
 class CpaBillingSettlementServiceImplTest
 {
     private static final Long USER_ID = 100L;
@@ -60,9 +60,9 @@ class CpaBillingSettlementServiceImplTest
         setField(service, "transactionManager", mock(PlatformTransactionManager.class));
     }
 
-    /** Worker 领取结算：reserved→pending_settlement 迁移成功后递减并发计数。 */
+    /** Worker 领取结算：遗留 reserved 账单迁移结算时不再触碰并发计数列，递减仅归人工核销出口。 */
     @Test
-    void processClaimedTaskShouldDecrementConcurrencyFromReserved()
+    void processClaimedTaskShouldNotDecrementConcurrencyFromReserved()
     {
         when(billingRecordMapper.selectByIdForUpdate(BILLING_ID)).thenReturn(record(CpaBillingConstants.STATUS_RESERVED));
         // 结算日志缺失按零费结算，避开金额计算分支
@@ -74,10 +74,10 @@ class CpaBillingSettlementServiceImplTest
 
         assertDoesNotThrow(() -> service.processClaimedTask(task(), CLAIM_TOKEN));
 
-        verify(sysUserMapper).decrementUserActiveRequestCount(USER_ID);
+        verify(sysUserMapper, never()).decrementUserActiveRequestCount(USER_ID);
     }
 
-    /** 账单已处于 pending_settlement（如失败重试后再次领取）时不重复递减。 */
+    /** 账单已处于 pending_settlement（如失败重试后再次领取）时同样不递减并发计数。 */
     @Test
     void processClaimedTaskShouldNotDecrementAgainFromPendingSettlement()
     {
@@ -93,7 +93,7 @@ class CpaBillingSettlementServiceImplTest
         verify(sysUserMapper, never()).decrementUserActiveRequestCount(USER_ID);
     }
 
-    /** 人工核销 reserved 来源账单：迁移成功后递减并发计数。 */
+    /** 人工核销 reserved 来源遗留账单：核销出口递减并发计数清理旧占位。 */
     @Test
     void writeOffShouldDecrementConcurrencyFromReserved()
     {
@@ -108,7 +108,7 @@ class CpaBillingSettlementServiceImplTest
         verify(sysUserMapper).decrementUserActiveRequestCount(USER_ID);
     }
 
-    /** 核销 pending_settlement 来源账单：并发占位在结算领取时已释放，不再递减。 */
+    /** 核销 pending_settlement 来源账单：递减仅针对 reserved 来源，此处不再递减。 */
     @Test
     void writeOffShouldNotDecrementAgainFromPendingSettlement()
     {

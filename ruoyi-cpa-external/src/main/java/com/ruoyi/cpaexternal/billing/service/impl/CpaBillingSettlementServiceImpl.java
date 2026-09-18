@@ -547,7 +547,7 @@ public class CpaBillingSettlementServiceImpl implements ICpaBillingSettlementSer
         {
             throw new ServiceException("更新人工核销账单失败");
         }
-        // 核销出口：仅 reserved 来源账单占用并发额度需释放（pending_settlement 来源在结算领取时已释放）
+        // 核销出口：仅遗留 reserved 账单在此递减并发计数清理旧占位（该列已随预占移除不再递增）
         if (CpaBillingConstants.STATUS_RESERVED.equals(billingRecord.getStatus()))
         {
             sysUserMapper.decrementUserActiveRequestCount(billingRecord.getUserId());
