@@ -1,6 +1,7 @@
 package com.ruoyi.web.controller.cpa;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
@@ -22,6 +23,8 @@ import com.ruoyi.common.exception.ServiceException;
 import com.ruoyi.cpaexternal.billing.domain.vo.CpaBillingAmountSummaryVO;
 import com.ruoyi.cpaexternal.billing.service.ICpaBillingRecordQueryService;
 import com.ruoyi.cpaexternal.log.domain.CpaAiLog;
+import com.ruoyi.cpaexternal.log.domain.vo.CpaAiLogListVO;
+import com.ruoyi.cpaexternal.log.domain.vo.CpaAiLogUsageListVO;
 import com.ruoyi.cpaexternal.log.domain.vo.CpaLogUserSummaryVO;
 import com.ruoyi.cpaexternal.log.service.ICpaAiLogService;
 import com.ruoyi.cpaexternal.subscription.domain.AiSubscriptionConstants;
@@ -74,6 +77,27 @@ class CpaAiLogControllerTest
         assertEquals(USER_ID, queryCaptor.getValue().getUserId());
         assertEquals("sk-123******3456", log.getApiKey());
         assertEquals(1L, response.getTotal());
+        assertEquals(CpaAiLogUsageListVO.class, response.getRows().get(0).getClass());
+        assertNull(((CpaAiLogUsageListVO) response.getRows().get(0)).getRelayMode());
+    }
+
+    @Test
+    void globalListShouldReturnOnlyListFields()
+    {
+        CpaAiLog log = new CpaAiLog();
+        log.setLogId(1L);
+        log.setRequestId("request-detail");
+        log.setSessionId("session-detail");
+        log.setApiKey("sk-1234567890123456");
+        log.setModel("gpt-test");
+        when(aiLogService.selectList(any(CpaAiLog.class))).thenReturn(List.of(log));
+
+        TableDataInfo response = controller.list(new CpaAiLog());
+
+        assertEquals(CpaAiLogListVO.class, response.getRows().get(0).getClass());
+        CpaAiLogListVO row = (CpaAiLogListVO) response.getRows().get(0);
+        assertEquals(1L, row.getLogId());
+        assertEquals("gpt-test", row.getModelName());
     }
 
     @Test

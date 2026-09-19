@@ -21,6 +21,8 @@ import com.ruoyi.cpaexternal.billing.domain.vo.CpaBillingAmountSummaryVO;
 import com.ruoyi.cpaexternal.billing.service.ICpaBillingRecordQueryService;
 import com.ruoyi.cpaexternal.log.domain.CpaAiLog;
 import com.ruoyi.cpaexternal.log.domain.CpaAiLogPayload;
+import com.ruoyi.cpaexternal.log.domain.vo.CpaAiLogListVO;
+import com.ruoyi.cpaexternal.log.domain.vo.CpaAiLogUsageListVO;
 import com.ruoyi.cpaexternal.log.domain.vo.CpaLogUserSummaryVO;
 import com.ruoyi.cpaexternal.log.service.ICpaAiLogService;
 import com.ruoyi.cpaexternal.subscription.domain.AiSubscriptionConstants;
@@ -52,7 +54,7 @@ public class CpaAiLogController extends BaseController
         startPage();
         List<CpaAiLog> list = aiLogService.selectList(query);
         list.forEach(this::maskApiKey);
-        return getDataTable(list);
+        return getDataTable(list.stream().map(CpaAiLogListVO::from).toList());
     }
 
     @PreAuthorize("@ss.hasPermi('aigate:log:query')")
@@ -94,7 +96,7 @@ public class CpaAiLogController extends BaseController
         startPage();
         List<CpaAiLog> list = aiLogService.selectList(query);
         list.forEach(this::maskApiKey);
-        return getDataTable(list);
+        return getDataTable(list.stream().map(CpaAiLogUsageListVO::from).toList());
     }
 
     @PreAuthorize("@ss.hasPermi('aigate:usageLog:query')")
