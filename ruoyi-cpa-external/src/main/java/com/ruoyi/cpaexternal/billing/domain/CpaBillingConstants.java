@@ -26,7 +26,7 @@ public final class CpaBillingConstants
     public static final String TASK_RESOLVED = "resolved";
 
 
-    /** AI 请求最低计费金额配置键，在结算边界应用。 */
+    /** AI 请求最低计费金额配置键，在 ai_log 入库前应用。 */
     public static final String CONFIG_MINIMUM_AMOUNT = "ai.billing.minimumAmount";
 
     private CpaBillingConstants()

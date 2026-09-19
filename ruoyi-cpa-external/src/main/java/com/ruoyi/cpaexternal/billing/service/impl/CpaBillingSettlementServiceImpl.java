@@ -27,7 +27,6 @@ import com.ruoyi.cpaexternal.billing.domain.CpaBillingSettlementTask;
 import com.ruoyi.cpaexternal.billing.domain.vo.CpaBillingSettlementFailedVO;
 import com.ruoyi.cpaexternal.billing.mapper.CpaBillingRecordMapper;
 import com.ruoyi.cpaexternal.billing.mapper.CpaBillingSettlementTaskMapper;
-import com.ruoyi.cpaexternal.billing.service.CpaBillingMinimumChargeResolver;
 import com.ruoyi.cpaexternal.billing.service.ICpaBillingSettlementService;
 import com.ruoyi.cpaexternal.log.domain.CpaAiLog;
 import com.ruoyi.cpaexternal.log.mapper.CpaAiLogMapper;
@@ -70,9 +69,6 @@ public class CpaBillingSettlementServiceImpl implements ICpaBillingSettlementSer
 
     @Autowired
     private CpaBillingProperties billingProperties;
-
-    @Autowired
-    private CpaBillingMinimumChargeResolver minimumChargeResolver;
 
     @Autowired
     private CpaBillingTransactionRetryExecutor transactionRetryExecutor;
@@ -347,7 +343,7 @@ public class CpaBillingSettlementServiceImpl implements ICpaBillingSettlementSer
 
     /**
      * 领取任务时读取最终结算金额：ai_log.cost 为权威值（延迟窗口内后续 usage
-     * 可能已更新），并应用最低计费；结算日志缺失或明确失败时按零费结算。
+     * 可能已更新）；最低计费已在 ai_log 入库前应用。结算日志缺失或明确失败时按零费结算。
      */
     private BigDecimal resolveFinalAmount(String requestId)
     {
@@ -362,7 +358,7 @@ public class CpaBillingSettlementServiceImpl implements ICpaBillingSettlementSer
             // 对历史脏数据和失败日志做结算边界兜底：failed 永远不能形成实扣。
             return ZERO;
         }
-        return minimumChargeResolver.applyMinimumAmount(settlementLog.getCost());
+        return nvl(settlementLog.getCost());
     }
 
     private void markTaskDone(CpaBillingSettlementTask task, String claimToken)

@@ -18,6 +18,7 @@ import com.ruoyi.common.utils.StringUtils;
 import com.ruoyi.cpaexternal.apikey.domain.CpaApiKey;
 import com.ruoyi.cpaexternal.apikey.service.ICpaApiKeyService;
 import com.ruoyi.cpaexternal.billing.domain.CpaBillingSettleCommand;
+import com.ruoyi.cpaexternal.billing.service.CpaBillingMinimumChargeResolver;
 import com.ruoyi.cpaexternal.billing.service.ICpaBillingSettlementService;
 import com.ruoyi.cpaexternal.log.billing.CpaAiLogCostCalculator;
 import com.ruoyi.cpaexternal.log.domain.CpaAiLog;
@@ -46,6 +47,9 @@ public class CpaAiLogServiceImpl implements ICpaAiLogService
 
     @Autowired
     private CpaAiLogCostCalculator costCalculator;
+
+    @Autowired
+    private CpaBillingMinimumChargeResolver minimumChargeResolver;
 
     /** 与 Spring MVC 数据绑定同代的 Jackson 3 ObjectMapper，用于序列化嵌套对象，保留 CLIProxyAPI 的 snake_case 字段名。 */
     @Autowired
@@ -199,10 +203,17 @@ public class CpaAiLogServiceImpl implements ICpaAiLogService
             resolveApiKeyOwner(aiLog);
         }
         // 明确失败的请求没有可计费的成功用量，强制零费用，避免失败日志携带的 token 被收费。
-        // 成功记录才按官方定价 × 用户倍率计算，并在入库时快照，避免后续调价影响历史记录。
-        aiLog.setCost(Boolean.TRUE.equals(aiLog.getFailed())
-                ? BigDecimal.ZERO
-                : costCalculator.calculate(payload, aiLog.getBillingMultiplier()));
+        // 成功记录按官方定价 × 用户倍率计算，并在 ai_log 入库前应用请求级最低计费，
+        // 使日志展示金额与后续实际结算金额保持一致。
+        if (Boolean.TRUE.equals(aiLog.getFailed()))
+        {
+            aiLog.setCost(BigDecimal.ZERO);
+        }
+        else
+        {
+            BigDecimal rawCost = costCalculator.calculate(payload, aiLog.getBillingMultiplier());
+            aiLog.setCost(rawCost == null ? null : minimumChargeResolver.applyMinimumAmount(rawCost));
+        }
         return aiLog;
     }
 

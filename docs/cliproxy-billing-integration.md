@@ -106,7 +106,7 @@ Key 级配额已下线，`key` 子对象为兼容旧插件保留结构，恒返�
 | `cpa.billing.settle-delay-seconds` | 5 | 延迟结算窗口，需大于凭据重试的最大间隔 |
 | `cpa.billing.settlement-worker-enabled` | true | 异步结算 Worker 开关 |
 | `cpa.billing.settlement-max-retries` | 10 | 自动重试上限，超限进入"结算异常"人工处置 |
-| sys_config `ai.billing.minimumAmount` | 0.001 | 请求级最低计费（结算边界应用） |
+| sys_config `ai.billing.minimumAmount` | 0.001 | 请求级最低计费（usage 写入 `ai_log` 前应用） |
 
 ## 用户并发限制
 

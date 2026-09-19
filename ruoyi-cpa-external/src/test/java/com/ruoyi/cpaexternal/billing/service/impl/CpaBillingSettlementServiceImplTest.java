@@ -19,7 +19,6 @@ import com.ruoyi.cpaexternal.billing.domain.CpaBillingRecord;
 import com.ruoyi.cpaexternal.billing.domain.CpaBillingSettlementTask;
 import com.ruoyi.cpaexternal.billing.mapper.CpaBillingRecordMapper;
 import com.ruoyi.cpaexternal.billing.mapper.CpaBillingSettlementTaskMapper;
-import com.ruoyi.cpaexternal.billing.service.CpaBillingMinimumChargeResolver;
 import com.ruoyi.cpaexternal.log.mapper.CpaAiLogMapper;
 import com.ruoyi.cpaexternal.subscription.mapper.AiUserSubscriptionMapper;
 import com.ruoyi.common.core.domain.entity.SysUser;
@@ -53,7 +52,6 @@ class CpaBillingSettlementServiceImplTest
         setField(service, "settlementTaskMapper", settlementTaskMapper);
         setField(service, "aiLogMapper", mock(CpaAiLogMapper.class));
         setField(service, "billingProperties", new CpaBillingProperties());
-        setField(service, "minimumChargeResolver", mock(CpaBillingMinimumChargeResolver.class));
         CpaBillingTransactionRetryExecutor retryExecutor = new CpaBillingTransactionRetryExecutor();
         setField(retryExecutor, "billingProperties", new CpaBillingProperties());
         setField(service, "transactionRetryExecutor", retryExecutor);

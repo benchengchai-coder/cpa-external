@@ -21,6 +21,7 @@ import com.ruoyi.common.core.domain.entity.SysUser;
 import com.ruoyi.cpaexternal.apikey.domain.CpaApiKey;
 import com.ruoyi.cpaexternal.apikey.service.ICpaApiKeyService;
 import com.ruoyi.cpaexternal.billing.domain.CpaBillingSettleCommand;
+import com.ruoyi.cpaexternal.billing.service.CpaBillingMinimumChargeResolver;
 import com.ruoyi.cpaexternal.billing.service.ICpaBillingSettlementService;
 import com.ruoyi.cpaexternal.log.billing.CpaAiLogCostCalculator;
 import com.ruoyi.cpaexternal.log.domain.CpaAiLog;
@@ -39,6 +40,7 @@ class CpaAiLogServiceImplTest
     private ICpaApiKeyService apiKeyService;
     private ISysUserService sysUserService;
     private CpaAiLogCostCalculator costCalculator;
+    private CpaBillingMinimumChargeResolver minimumChargeResolver;
     private ICpaBillingSettlementService billingSettlementService;
     private CpaAiLogServiceImpl service;
 
@@ -49,12 +51,16 @@ class CpaAiLogServiceImplTest
         apiKeyService = mock(ICpaApiKeyService.class);
         sysUserService = mock(ISysUserService.class);
         costCalculator = mock(CpaAiLogCostCalculator.class);
+        minimumChargeResolver = mock(CpaBillingMinimumChargeResolver.class);
+        when(minimumChargeResolver.applyMinimumAmount(any(BigDecimal.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
         billingSettlementService = mock(ICpaBillingSettlementService.class);
         service = new CpaAiLogServiceImpl();
         setField("aiLogMapper", aiLogMapper);
         setField("apiKeyService", apiKeyService);
         setField("sysUserService", sysUserService);
         setField("costCalculator", costCalculator);
+        setField("minimumChargeResolver", minimumChargeResolver);
         setField("billingSettlementService", billingSettlementService);
         setField("objectMapper", mock(ObjectMapper.class));
     }
@@ -89,6 +95,25 @@ class CpaAiLogServiceImplTest
         assertNull(inserted.getUserId());
         // 用户无法归属时倍率未知，按官方价（倍率 1）计算。
         verify(costCalculator).calculate(any(CpaAiLogPayload.class), isNull());
+    }
+
+    /** 成功 usage 入库前即应用最低计费，结算提交沿用同一最终金额。 */
+    @Test
+    void ingestShouldApplyMinimumChargeBeforeLogInsert()
+    {
+        when(aiLogMapper.selectByRequestId("req-1")).thenReturn(null);
+        when(apiKeyService.selectByPlainKey(PLAIN_KEY)).thenReturn(null);
+        when(costCalculator.calculate(any(CpaAiLogPayload.class), isNull()))
+                .thenReturn(new BigDecimal("0.0001"));
+        when(minimumChargeResolver.applyMinimumAmount(new BigDecimal("0.0001")))
+                .thenReturn(new BigDecimal("0.0010000000"));
+
+        CpaAiLog inserted = captureIngest(payload());
+
+        assertEquals(new BigDecimal("0.0010000000"), inserted.getCost());
+        ArgumentCaptor<CpaBillingSettleCommand> commandCaptor = ArgumentCaptor.forClass(CpaBillingSettleCommand.class);
+        verify(billingSettlementService).submitSettlement(commandCaptor.capture());
+        assertEquals(new BigDecimal("0.0010000000"), commandCaptor.getValue().getAmount());
     }
 
     /** CLIProxyAPI 上报的 ISO-8601 时间需要在入库前格式化成 datetime。 */

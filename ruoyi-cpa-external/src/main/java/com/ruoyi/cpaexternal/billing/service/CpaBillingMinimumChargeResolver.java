@@ -13,7 +13,7 @@ import com.ruoyi.system.service.ISysConfigService;
 /**
  * CLIProxyAPI 请求最低计费金额解析与应用服务。
  *
- * <p>最低计费属于一次请求的最终费用策略，在结算边界一次性应用，
+ * <p>最低计费属于一次请求的最终费用策略，在 ai_log 入库前一次性应用，
  * 不在各个模型或工具的单项计费阶段分别应用。</p>
  */
 @Service
@@ -73,7 +73,7 @@ public class CpaBillingMinimumChargeResolver
      * 对一次请求的原始费用应用最低计费金额。
      *
      * <p>原始费用为 null（模型未定价）时按 0 处理，最低计费不生效，
-     * 由结算流程按 no_charge 释放预占。</p>
+     * 由结算流程按 no_charge 处理。</p>
      */
     public BigDecimal applyMinimumAmount(BigDecimal rawCost, BigDecimal minimumAmount)
     {
@@ -91,7 +91,7 @@ public class CpaBillingMinimumChargeResolver
         return normalizedCost.max(normalizedMinimum).setScale(MONEY_SCALE, RoundingMode.HALF_UP);
     }
 
-    /** 读取配置并立即应用最低计费金额，供没有请求快照的内部调用使用。 */
+    /** 读取配置并立即应用最低计费金额，供 usage 入库和请求预检使用。 */
     public BigDecimal applyMinimumAmount(BigDecimal rawCost)
     {
         return applyMinimumAmount(rawCost, resolveMinimumAmount());

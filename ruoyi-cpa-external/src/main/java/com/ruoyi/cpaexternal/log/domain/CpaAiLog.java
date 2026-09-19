@@ -62,7 +62,7 @@ public class CpaAiLog extends BaseEntity
     private String status;
     /** 入库时用户计费倍率快照，未归属用户时为 null。 */
     private BigDecimal billingMultiplier;
-    /** 计算费用（官方定价×用户倍率，美元），模型未配置定价时为 null。 */
+    /** 最终费用（官方定价×用户倍率并应用请求最低计费，美元），模型未配置定价时为 null。 */
     private BigDecimal cost;
     private Date createTime;
 
