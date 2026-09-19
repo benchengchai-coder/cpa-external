@@ -1,6 +1,7 @@
 package com.ruoyi.web.controller.cpa;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.LinkedHashMap;
@@ -16,6 +17,9 @@ import org.springframework.web.bind.annotation.RestController;
 import com.ruoyi.cpaexternal.apikey.domain.CpaApiKey;
 import com.ruoyi.cpaexternal.apikey.service.ICpaApiKeyService;
 import com.ruoyi.cpaexternal.billing.config.CpaBillingProperties;
+import com.ruoyi.cpaexternal.billing.service.CpaBillingMinimumChargeResolver;
+import com.ruoyi.cpaexternal.model.domain.CpaModel;
+import com.ruoyi.cpaexternal.model.mapper.CpaModelMapper;
 import com.ruoyi.cpaexternal.subscription.domain.AiSubscriptionConstants;
 import com.ruoyi.cpaexternal.subscription.domain.AiUserSubscription;
 import com.ruoyi.cpaexternal.subscription.mapper.AiUserSubscriptionMapper;
@@ -41,6 +45,11 @@ public class CpaBillingExternalController
 
     private static final String USER_STATUS_NORMAL = "0";
 
+    /** 预检默认按 1M 输入 Token 估算。 */
+    private static final BigDecimal ESTIMATE_INPUT_TOKENS = new BigDecimal("1000000");
+
+    private static final int MONEY_SCALE = 10;
+
     @Autowired
     private ICpaApiKeyService apiKeyService;
 
@@ -52,6 +61,12 @@ public class CpaBillingExternalController
 
     @Autowired
     private CpaBillingProperties billingProperties;
+
+    @Autowired
+    private CpaModelMapper modelMapper;
+
+    @Autowired
+    private CpaBillingMinimumChargeResolver minimumChargeResolver;
 
     /** 余额/订阅只读校验 + 余额预检，供 CLIProxyAPI 或诊断工具预检。 */
     @PostMapping("/check")
@@ -86,6 +101,15 @@ public class CpaBillingExternalController
             body.put("reason", "API Key关联用户不存在或已停用");
             return ResponseEntity.ok(body);
         }
+        String modelName = request == null ? null : stringValue(request.get("model"));
+        CpaModel model = StringUtils.isEmpty(modelName) ? null : modelMapper.selectPricingByName(modelName);
+        if (model == null)
+        {
+            body.put("allowed", false);
+            body.put("reason", "模型不存在或未配置计费信息");
+            return ResponseEntity.ok(body);
+        }
+        BigDecimal estimatedCost = estimateCost(model, user.getBillingMultiplier());
         AiUserSubscription subscription = userSubscriptionMapper
                 .selectActiveSubscriptionSnapshotForBilling(user.getUserId());
 
@@ -93,10 +117,12 @@ public class CpaBillingExternalController
         BigDecimal walletFrozen = nvl(user.getFrozenBalance());
         BigDecimal walletAvailable = positive(balance.subtract(walletFrozen));
         if (billingProperties.isBalanceCheckEnabled()
-                && !hasUsableFunds(user.getBillingPreference(), walletAvailable, subscription))
+                && !hasSufficientFunds(user.getBillingPreference(), walletAvailable, subscription, estimatedCost))
         {
             body.put("allowed", false);
             body.put("reason", insufficientFundsReason(user.getBillingPreference()));
+            body.put("estimated_cost", estimatedCost);
+            body.put("model", modelName);
             return ResponseEntity.ok(body);
         }
 
@@ -104,6 +130,8 @@ public class CpaBillingExternalController
         body.put("user_id", user.getUserId());
         body.put("key_id", key.getKeyId());
         body.put("billing_preference", user.getBillingPreference());
+        body.put("model", modelName);
+        body.put("estimated_cost", estimatedCost);
 
         Map<String, Object> wallet = new LinkedHashMap<>();
         wallet.put("balance", balance);
@@ -161,20 +189,38 @@ public class CpaBillingExternalController
      * （钱包可用 = 余额 - 冻结；不限量订阅 amount_total=0，getAvailableAmount()=null，视为可用）。
      * 后付费模型下这是请求级兜底，不保证覆盖结算延迟窗口内的消耗。
      */
-    private boolean hasUsableFunds(String preference, BigDecimal walletAvailable, AiUserSubscription subscription)
+    private boolean hasSufficientFunds(String preference, BigDecimal walletAvailable,
+            AiUserSubscription subscription, BigDecimal estimatedCost)
     {
         boolean subscriptionUsable = subscription != null
                 && (subscription.getAvailableAmount() == null
-                        || subscription.getAvailableAmount().compareTo(BigDecimal.ZERO) > 0);
+                        || subscription.getAvailableAmount().compareTo(estimatedCost) >= 0);
         if (AiSubscriptionConstants.PREFERENCE_WALLET_ONLY.equals(preference))
         {
-            return walletAvailable.compareTo(BigDecimal.ZERO) > 0;
+            return walletAvailable.compareTo(estimatedCost) >= 0;
         }
         if (AiSubscriptionConstants.PREFERENCE_SUBSCRIPTION_ONLY.equals(preference))
         {
             return subscriptionUsable;
         }
-        return walletAvailable.compareTo(BigDecimal.ZERO) > 0 || subscriptionUsable;
+        return walletAvailable.compareTo(estimatedCost) >= 0 || subscriptionUsable;
+    }
+
+    /** 按 1M 输入 Token、模型输入单价和用户倍率估算本次请求费用。 */
+    private BigDecimal estimateCost(CpaModel model, BigDecimal billingMultiplier)
+    {
+        BigDecimal inputPrice = nvl(model.getOfficialInputPrice());
+        BigDecimal multiplier = billingMultiplier == null ? BigDecimal.ONE : billingMultiplier;
+        BigDecimal calculated = ESTIMATE_INPUT_TOKENS.multiply(inputPrice)
+                .divide(ESTIMATE_INPUT_TOKENS, MONEY_SCALE, RoundingMode.HALF_UP)
+                .multiply(multiplier)
+                .setScale(MONEY_SCALE, RoundingMode.HALF_UP);
+        return minimumChargeResolver.applyMinimumAmount(calculated);
+    }
+
+    private String stringValue(Object value)
+    {
+        return value == null ? null : String.valueOf(value).trim();
     }
 
     /** 拒绝原因带"余额/额度"特征词，CLIProxyAPI 计费插件据此映射为 402。 */

@@ -10,7 +10,7 @@
 ```
 客户端 → CLIProxyAPI
            ↓ 请求前（intercept_before，可选预检）
-         POST /aigate/billing/check   ← 只读校验 Key/用户有效性 + 余额预检，不产生任何计费副作用
+         POST /aigate/billing/check   ← 校验 Key/用户、按模型估算费用并做余额预检，不产生计费副作用
            ↓ allowed=false → CLIProxyAPI 直接拒绝（建议 402/403）
            ↓ allowed=true  → CLIProxyAPI 处理 AI 请求
            ↓ 请求完成
@@ -50,10 +50,10 @@
 
 ### POST /aigate/billing/check
 
-余额/订阅只读校验，不产生任何计费副作用，可用于诊断或请求前预检：
+余额/订阅只读校验与请求费用预估，不产生任何计费副作用，可用于诊断或请求前预检：
 
 ```json
-{ "api_key": "sk-xxxx" }
+{ "api_key": "sk-xxxx", "model": "gpt-5.6-sol" }
 ```
 
 响应：`allowed`、`user_id`、`key_id`、`billing_preference`、`wallet{balance,
@@ -68,13 +68,15 @@ Key 级配额已下线，`key` 子对象为兼容旧插件保留结构，恒返�
 
 1. Key 无效/停用，或关联用户不存在/停用 → 建议映射 403；
 2. **余额预检**（`cpa.billing.balance-check-enabled`，默认开启）：按用户计费偏好判定
-   是否还有可用资金源，资金口径与结算分配一致——
-   - `wallet_only`：钱包可用（余额 − 冻结）> 0；
-   - `subscription_only`：存在生效订阅且可用额度 > 0（不限量订阅视为可用）；
-   - `wallet_first` / `subscription_first`：钱包或订阅任一可用；
+   是否有足够资金覆盖本次预估费用，资金口径与结算分配一致——
+   - 服务端根据 `model` 查询输入单价，按 1,000,000 个输入 Token 和用户计费倍率计算预估费用；
+   - 预估费用低于 `sys_config` 的 `ai.billing.minimumAmount` 时按该配置值计算；
+   - `wallet_only`：钱包可用额度（余额 − 冻结）≥ 本次预估费用；
+   - `subscription_only`：存在生效订阅且可用额度 ≥ 本次预估费用（不限量订阅视为可用）；
+   - `wallet_first` / `subscription_first`：钱包或订阅任一额度足够；
    - 拒绝原因带"余额/额度"特征词（如"钱包余额不足且无可用订阅额度"），
      CLIProxyAPI 插件据此映射 402。
-   并发不在请求阶段判定。预检是后付费模型的请求级兜底：余额尚有结余（哪怕一分钱）
+   并发不在请求阶段判定。预检是后付费模型的请求级兜底：余额足够覆盖本次预估费用
    的用户在结算延迟窗口内仍可继续消费，欠收差额由结算记为 `partial` 的
    `uncovered_amount`，不会把余额打成负数。
 
